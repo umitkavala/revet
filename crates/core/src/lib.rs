@@ -9,12 +9,17 @@
 pub mod cache;
 pub mod config;
 pub mod diff;
+pub mod discovery;
+pub mod finding;
 pub mod graph;
 pub mod parser;
 
+pub use cache::{GraphCache, GraphCacheMeta};
 pub use config::RevetConfig;
-pub use diff::{ChangeClassification, DiffAnalyzer, ImpactAnalysis};
-pub use graph::{CodeGraph, Edge, Node, NodeId};
+pub use diff::{ChangeClassification, ChangeImpact, DiffAnalyzer, ImpactAnalysis, ImpactSummary};
+pub use discovery::discover_files;
+pub use finding::{Finding, ReviewSummary, Severity};
+pub use graph::{CodeGraph, Edge, Node, NodeData, NodeId, NodeKind};
 pub use parser::{LanguageParser, ParseError, ParserDispatcher};
 
 /// Revet version

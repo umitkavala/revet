@@ -2,7 +2,7 @@
 
 pub mod impact;
 
-pub use impact::{ChangeClassification, ImpactAnalysis, ImpactReport};
+pub use impact::{ChangeClassification, ChangeImpact, ImpactAnalysis, ImpactReport, ImpactSummary};
 
 use anyhow::{Context, Result};
 use git2::{Diff, DiffOptions, Repository};

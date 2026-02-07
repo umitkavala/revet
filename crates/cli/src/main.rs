@@ -1,7 +1,6 @@
 //! Revet CLI - Code review agent
 
 mod commands;
-#[allow(dead_code)]
 mod output;
 #[allow(dead_code)]
 mod progress;
@@ -14,7 +13,7 @@ use std::path::PathBuf;
 #[command(name = "revet")]
 #[command(about = "Code review that understands your architecture", long_about = None)]
 #[command(version = revet_core::VERSION)]
-struct Cli {
+pub(crate) struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
@@ -73,7 +72,7 @@ enum Commands {
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
-enum OutputFormat {
+pub(crate) enum OutputFormat {
     Terminal,
     Json,
     Sarif,
