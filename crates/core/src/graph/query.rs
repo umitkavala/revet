@@ -1,8 +1,6 @@
 //! Graph query operations for impact analysis and dependency traversal
 
-use super::{CodeGraph, NodeId, Edge, EdgeKind};
-use petgraph::visit::{Bfs, EdgeRef};
-use petgraph::Direction;
+use super::{CodeGraph, EdgeKind, NodeId};
 use std::collections::{HashSet, VecDeque};
 
 /// A query interface for complex graph operations
@@ -94,7 +92,14 @@ impl<'a> GraphQuery<'a> {
         let mut visited = HashSet::new();
         visited.insert(from);
 
-        self.find_paths_recursive(from, to, max_length, &mut current_path, &mut visited, &mut paths);
+        self.find_paths_recursive(
+            from,
+            to,
+            max_length,
+            &mut current_path,
+            &mut visited,
+            &mut paths,
+        );
 
         paths
     }
@@ -153,7 +158,7 @@ impl<'a> GraphQuery<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{Node, NodeKind, NodeData, Edge, EdgeKind};
+    use crate::graph::{Edge, EdgeKind, Node, NodeData, NodeKind};
     use std::path::PathBuf;
 
     #[test]

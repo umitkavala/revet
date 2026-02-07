@@ -1,18 +1,18 @@
 //! Code dependency graph data structures and operations
 
-pub mod nodes;
 pub mod edges;
+pub mod nodes;
 pub mod query;
 
-pub use nodes::{Node, NodeKind, NodeData, Parameter};
 pub use edges::{Edge, EdgeKind, EdgeMetadata};
+pub use nodes::{Node, NodeData, NodeKind, Parameter};
 pub use query::GraphQuery;
 
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
+use std::path::{Path, PathBuf};
 
 /// Unique identifier for a node in the code graph
 pub type NodeId = NodeIndex;
@@ -50,7 +50,7 @@ impl CodeGraph {
 
         // Update the index
         let key = format!("{}:{}", node.file_path().display(), node.name());
-        self.node_index.entry(key).or_insert_with(Vec::new).push(node_id);
+        self.node_index.entry(key).or_default().push(node_id);
 
         node_id
     }
@@ -71,7 +71,7 @@ impl CodeGraph {
     }
 
     /// Find nodes by file path and optional name pattern
-    pub fn find_nodes(&self, file_path: &PathBuf, name_pattern: Option<&str>) -> Vec<NodeId> {
+    pub fn find_nodes(&self, file_path: &Path, name_pattern: Option<&str>) -> Vec<NodeId> {
         if let Some(pattern) = name_pattern {
             let key = format!("{}:{}", file_path.display(), pattern);
             self.node_index.get(&key).cloned().unwrap_or_default()
@@ -87,7 +87,9 @@ impl CodeGraph {
 
     /// Get all nodes in the graph
     pub fn nodes(&self) -> impl Iterator<Item = (NodeId, &Node)> {
-        self.graph.node_indices().map(move |id| (id, &self.graph[id]))
+        self.graph
+            .node_indices()
+            .map(move |id| (id, &self.graph[id]))
     }
 
     /// Get all edges from a node
@@ -132,7 +134,7 @@ impl CodeGraph {
     }
 
     /// Get a query interface for complex graph operations
-    pub fn query(&self) -> GraphQuery {
+    pub fn query(&self) -> GraphQuery<'_> {
         GraphQuery::new(self)
     }
 }

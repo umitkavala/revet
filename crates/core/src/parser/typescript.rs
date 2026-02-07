@@ -1,7 +1,7 @@
 //! TypeScript/JavaScript language parser using Tree-sitter
 
 use super::{LanguageParser, ParseError};
-use crate::graph::{CodeGraph, Node, NodeId, NodeKind, NodeData, Edge, EdgeKind, Parameter};
+use crate::graph::{CodeGraph, Node, NodeData, NodeId, NodeKind};
 use std::path::Path;
 use tree_sitter::Parser;
 
@@ -10,11 +10,17 @@ pub struct TypeScriptParser {
     language: tree_sitter::Language,
 }
 
-impl TypeScriptParser {
-    pub fn new() -> Self {
+impl Default for TypeScriptParser {
+    fn default() -> Self {
         Self {
             language: tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         }
+    }
+}
+
+impl TypeScriptParser {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     fn create_parser(&self) -> Result<Parser, ParseError> {
@@ -35,7 +41,11 @@ impl LanguageParser for TypeScriptParser {
         &[".ts", ".tsx", ".js", ".jsx"]
     }
 
-    fn parse_file(&self, file_path: &Path, graph: &mut CodeGraph) -> Result<Vec<NodeId>, ParseError> {
+    fn parse_file(
+        &self,
+        file_path: &Path,
+        graph: &mut CodeGraph,
+    ) -> Result<Vec<NodeId>, ParseError> {
         let source = std::fs::read_to_string(file_path)?;
         self.parse_source(&source, file_path, graph)
     }
@@ -47,16 +57,20 @@ impl LanguageParser for TypeScriptParser {
         graph: &mut CodeGraph,
     ) -> Result<Vec<NodeId>, ParseError> {
         let mut parser = self.create_parser()?;
-        let tree = parser
-            .parse(source, None)
-            .ok_or_else(|| ParseError::ParseFailed("Failed to parse TypeScript source".to_string()))?;
+        let _tree = parser.parse(source, None).ok_or_else(|| {
+            ParseError::ParseFailed("Failed to parse TypeScript source".to_string())
+        })?;
 
         let mut node_ids = Vec::new();
 
         // Create file node
         let file_node = Node::new(
             NodeKind::File,
-            file_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+            file_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
             file_path.to_path_buf(),
             0,
             NodeData::File {

@@ -37,7 +37,11 @@ pub trait LanguageParser: Send + Sync {
     /// Parse a file and add its entities to the code graph
     ///
     /// Returns the IDs of top-level nodes created (e.g., functions, classes)
-    fn parse_file(&self, file_path: &Path, graph: &mut CodeGraph) -> Result<Vec<NodeId>, ParseError>;
+    fn parse_file(
+        &self,
+        file_path: &Path,
+        graph: &mut CodeGraph,
+    ) -> Result<Vec<NodeId>, ParseError>;
 
     /// Parse source code and add its entities to the code graph
     ///
@@ -78,23 +82,29 @@ impl ParserDispatcher {
 
         self.parsers
             .iter()
-            .find(|parser| parser.file_extensions().contains(&extension_with_dot.as_str()))
+            .find(|parser| {
+                parser
+                    .file_extensions()
+                    .contains(&extension_with_dot.as_str())
+            })
             .map(|boxed| &**boxed)
     }
 
     /// Parse a file using the appropriate parser
-    pub fn parse_file(&self, file_path: &Path, graph: &mut CodeGraph) -> Result<Vec<NodeId>, ParseError> {
-        let parser = self
-            .find_parser(file_path)
-            .ok_or_else(|| {
-                ParseError::UnsupportedLanguage(
-                    file_path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .unwrap_or("unknown")
-                        .to_string(),
-                )
-            })?;
+    pub fn parse_file(
+        &self,
+        file_path: &Path,
+        graph: &mut CodeGraph,
+    ) -> Result<Vec<NodeId>, ParseError> {
+        let parser = self.find_parser(file_path).ok_or_else(|| {
+            ParseError::UnsupportedLanguage(
+                file_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("unknown")
+                    .to_string(),
+            )
+        })?;
 
         parser.parse_file(file_path, graph)
     }

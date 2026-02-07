@@ -1,6 +1,6 @@
 //! Edge types for the code graph
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// An edge in the code graph representing a relationship between code entities
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

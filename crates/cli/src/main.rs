@@ -1,7 +1,9 @@
 //! Revet CLI - Code review agent
 
 mod commands;
+#[allow(dead_code)]
 mod output;
+#[allow(dead_code)]
 mod progress;
 
 use anyhow::Result;

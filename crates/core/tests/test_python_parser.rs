@@ -3,8 +3,8 @@
 //! These tests verify that the Python parser correctly extracts all node types
 //! and builds an accurate dependency graph from real Python code.
 
+use revet_core::graph::{EdgeKind, NodeData, NodeId, NodeKind};
 use revet_core::{CodeGraph, ParserDispatcher};
-use revet_core::graph::{NodeKind, EdgeKind, NodeData, NodeId};
 use std::path::PathBuf;
 
 #[test]
@@ -21,19 +21,25 @@ fn test_parse_flask_fixture() {
     let dispatcher = ParserDispatcher::new();
 
     let result = dispatcher.parse_file(&fixture_path, &mut graph);
-    assert!(result.is_ok(), "Failed to parse fixture: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Failed to parse fixture: {:?}",
+        result.err()
+    );
 
     // Verify functions were extracted
-    let functions: Vec<_> = graph.nodes()
+    let functions: Vec<_> = graph
+        .nodes()
         .filter(|(_, n)| matches!(n.kind(), NodeKind::Function))
         .collect();
 
-    assert!(functions.len() >= 2, "Expected at least 2 functions (get_user, search)");
+    assert!(
+        functions.len() >= 2,
+        "Expected at least 2 functions (get_user, search)"
+    );
 
     // Verify we found the vulnerable functions
-    let function_names: Vec<&str> = functions.iter()
-        .map(|(_, n)| n.name())
-        .collect();
+    let function_names: Vec<&str> = functions.iter().map(|(_, n)| n.name()).collect();
 
     assert!(function_names.contains(&"get_user"));
     assert!(function_names.contains(&"search"));
@@ -72,21 +78,30 @@ class ServiceDog(Dog):
     let mut graph = CodeGraph::new(PathBuf::from("/test"));
     let dispatcher = ParserDispatcher::new();
     let parser = dispatcher.find_parser(&PathBuf::from("test.py")).unwrap();
-    parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+    parser
+        .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+        .unwrap();
 
     // Verify all classes were extracted
-    let classes: Vec<_> = graph.nodes()
+    let classes: Vec<_> = graph
+        .nodes()
         .filter(|(_, n)| matches!(n.kind(), NodeKind::Class))
         .collect();
 
     assert_eq!(classes.len(), 3, "Expected 3 classes");
 
     // Verify inheritance
-    let service_dog = classes.iter()
+    let service_dog = classes
+        .iter()
         .find(|(_, n)| n.name() == "ServiceDog")
         .expect("ServiceDog class not found");
 
-    if let NodeData::Class { base_classes, methods, .. } = service_dog.1.data() {
+    if let NodeData::Class {
+        base_classes,
+        methods,
+        ..
+    } = service_dog.1.data()
+    {
         assert_eq!(base_classes, &vec!["Dog".to_string()]);
         assert!(methods.contains(&"__init__".to_string()));
         assert!(methods.contains(&"perform_task".to_string()));
@@ -96,12 +111,16 @@ class ServiceDog(Dog):
     }
 
     // Verify method count
-    let functions: Vec<_> = graph.nodes()
+    let functions: Vec<_> = graph
+        .nodes()
         .filter(|(_, n)| matches!(n.kind(), NodeKind::Function))
         .collect();
 
     // Should have methods from all classes
-    assert!(functions.len() >= 7, "Expected at least 7 methods across all classes");
+    assert!(
+        functions.len() >= 7,
+        "Expected at least 7 methods across all classes"
+    );
 }
 
 #[test]
@@ -125,19 +144,20 @@ def process_files(paths: List[Path]) -> Dict[str, int]:
     let dispatcher = ParserDispatcher::new();
     let parser = dispatcher.find_parser(&PathBuf::from("test.py")).unwrap();
 
-    parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+    parser
+        .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+        .unwrap();
 
     // Verify imports were extracted
-    let imports: Vec<_> = graph.nodes()
+    let imports: Vec<_> = graph
+        .nodes()
         .filter(|(_, n)| matches!(n.kind(), NodeKind::Import))
         .collect();
 
     assert!(imports.len() >= 3, "Expected at least 3 import statements");
 
     // Verify import names
-    let import_names: Vec<&str> = imports.iter()
-        .map(|(_, n)| n.name())
-        .collect();
+    let import_names: Vec<&str> = imports.iter().map(|(_, n)| n.name()).collect();
 
     assert!(import_names.contains(&"os"));
     assert!(import_names.contains(&"pathlib"));
@@ -166,10 +186,13 @@ def main():
     let dispatcher = ParserDispatcher::new();
     let parser = dispatcher.find_parser(&PathBuf::from("test.py")).unwrap();
 
-    parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+    parser
+        .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+        .unwrap();
 
     // Build function name -> id map
-    let funcs: std::collections::HashMap<String, NodeId> = graph.nodes()
+    let funcs: std::collections::HashMap<String, NodeId> = graph
+        .nodes()
         .filter(|(_, n)| matches!(n.kind(), NodeKind::Function))
         .map(|(id, n)| (n.name().to_string(), id))
         .collect();
@@ -178,7 +201,8 @@ def main():
 
     // Verify main calls all helpers
     let main_id = funcs.get("main").expect("main function not found");
-    let main_calls: Vec<_> = graph.edges_from(*main_id)
+    let main_calls: Vec<_> = graph
+        .edges_from(*main_id)
         .filter(|(_, e)| matches!(e.kind(), EdgeKind::Calls))
         .collect();
 
@@ -186,11 +210,16 @@ def main():
 
     // Verify helper_c calls helper_b twice
     let helper_c_id = funcs.get("helper_c").expect("helper_c not found");
-    let helper_c_calls: Vec<_> = graph.edges_from(*helper_c_id)
+    let helper_c_calls: Vec<_> = graph
+        .edges_from(*helper_c_id)
         .filter(|(_, e)| matches!(e.kind(), EdgeKind::Calls))
         .collect();
 
-    assert_eq!(helper_c_calls.len(), 2, "helper_c should call helper_b twice");
+    assert_eq!(
+        helper_c_calls.len(),
+        2,
+        "helper_c should call helper_b twice"
+    );
 }
 
 #[test]
@@ -226,16 +255,17 @@ class DataProcessor:
     let dispatcher = ParserDispatcher::new();
     let parser = dispatcher.find_parser(&PathBuf::from("test.py")).unwrap();
 
-    parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+    parser
+        .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+        .unwrap();
 
     // Verify functions extracted despite decorators
-    let functions: Vec<_> = graph.nodes()
+    let functions: Vec<_> = graph
+        .nodes()
         .filter(|(_, n)| matches!(n.kind(), NodeKind::Function))
         .collect();
 
-    let function_names: Vec<&str> = functions.iter()
-        .map(|(_, n)| n.name())
-        .collect();
+    let function_names: Vec<&str> = functions.iter().map(|(_, n)| n.name()).collect();
 
     assert!(function_names.contains(&"process_data"));
     assert!(function_names.contains(&"validate_input"));
@@ -246,11 +276,16 @@ class DataProcessor:
     assert!(function_names.contains(&"validate"));
 
     // Verify parameter types were extracted
-    let process_data = functions.iter()
+    let process_data = functions
+        .iter()
         .find(|(_, n)| n.name() == "process_data")
         .expect("process_data not found");
 
-    if let NodeData::Function { parameters, return_type } = process_data.1.data() {
+    if let NodeData::Function {
+        parameters,
+        return_type,
+    } = process_data.1.data()
+    {
         assert_eq!(parameters.len(), 2);
         assert_eq!(parameters[0].name, "items");
         assert_eq!(parameters[0].param_type, Some("List[str]".to_string()));
@@ -284,16 +319,17 @@ def main():
     let dispatcher = ParserDispatcher::new();
     let parser = dispatcher.find_parser(&PathBuf::from("test.py")).unwrap();
 
-    parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+    parser
+        .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+        .unwrap();
 
     // Verify nested functions are extracted
-    let functions: Vec<_> = graph.nodes()
+    let functions: Vec<_> = graph
+        .nodes()
         .filter(|(_, n)| matches!(n.kind(), NodeKind::Function))
         .collect();
 
-    let function_names: Vec<&str> = functions.iter()
-        .map(|(_, n)| n.name())
-        .collect();
+    let function_names: Vec<&str> = functions.iter().map(|(_, n)| n.name()).collect();
 
     assert!(function_names.contains(&"outer"));
     assert!(function_names.contains(&"inner"));
@@ -301,7 +337,11 @@ def main():
     assert!(function_names.contains(&"multiply"));
     assert!(function_names.contains(&"main"));
 
-    assert_eq!(functions.len(), 5, "Expected 5 functions including nested ones");
+    assert_eq!(
+        functions.len(),
+        5,
+        "Expected 5 functions including nested ones"
+    );
 }
 
 #[test]
@@ -328,16 +368,17 @@ async def main():
     let dispatcher = ParserDispatcher::new();
     let parser = dispatcher.find_parser(&PathBuf::from("test.py")).unwrap();
 
-    parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+    parser
+        .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+        .unwrap();
 
     // Verify async functions are extracted
-    let functions: Vec<_> = graph.nodes()
+    let functions: Vec<_> = graph
+        .nodes()
         .filter(|(_, n)| matches!(n.kind(), NodeKind::Function))
         .collect();
 
-    let function_names: Vec<&str> = functions.iter()
-        .map(|(_, n)| n.name())
-        .collect();
+    let function_names: Vec<&str> = functions.iter().map(|(_, n)| n.name()).collect();
 
     assert!(function_names.contains(&"fetch_data"));
     assert!(function_names.contains(&"process_batch"));
@@ -369,7 +410,9 @@ def main():
     let dispatcher = ParserDispatcher::new();
     let parser = dispatcher.find_parser(&PathBuf::from("test.py")).unwrap();
 
-    parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+    parser
+        .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+        .unwrap();
 
     // Count node types
     let mut node_counts = std::collections::HashMap::new();

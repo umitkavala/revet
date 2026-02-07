@@ -1,6 +1,6 @@
 //! Node types for the code graph
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// A node in the code graph representing a code entity

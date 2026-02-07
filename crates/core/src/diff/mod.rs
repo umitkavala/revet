@@ -2,13 +2,11 @@
 
 pub mod impact;
 
-pub use impact::{ImpactAnalysis, ChangeClassification, ImpactReport};
+pub use impact::{ChangeClassification, ImpactAnalysis, ImpactReport};
 
-use crate::graph::{CodeGraph, NodeId};
-use anyhow::{Result, Context};
-use git2::{Repository, Diff, DiffOptions};
+use anyhow::{Context, Result};
+use git2::{Diff, DiffOptions, Repository};
 use std::path::{Path, PathBuf};
-use std::collections::HashSet;
 
 /// Analyzes git diffs to determine code changes and their impact
 pub struct DiffAnalyzer {
@@ -18,14 +16,13 @@ pub struct DiffAnalyzer {
 impl DiffAnalyzer {
     /// Create a new diff analyzer for a repository
     pub fn new(repo_path: &Path) -> Result<Self> {
-        let repo = Repository::open(repo_path)
-            .context("Failed to open git repository")?;
+        let repo = Repository::open(repo_path).context("Failed to open git repository")?;
 
         Ok(Self { repo })
     }
 
     /// Get the diff between two commits/refs
-    pub fn get_diff(&self, base: &str, head: Option<&str>) -> Result<Diff> {
+    pub fn get_diff(&self, base: &str, head: Option<&str>) -> Result<Diff<'_>> {
         let base_tree = self.resolve_tree(base)?;
         let head_tree = match head {
             Some(h) => Some(self.resolve_tree(h)?),
@@ -35,11 +32,9 @@ impl DiffAnalyzer {
         let mut opts = DiffOptions::new();
         opts.ignore_whitespace(false);
 
-        let diff = self.repo.diff_tree_to_tree(
-            Some(&base_tree),
-            head_tree.as_ref(),
-            Some(&mut opts),
-        )?;
+        let diff =
+            self.repo
+                .diff_tree_to_tree(Some(&base_tree), head_tree.as_ref(), Some(&mut opts))?;
 
         Ok(diff)
     }
@@ -111,7 +106,7 @@ impl DiffAnalyzer {
         Ok(line_ranges)
     }
 
-    fn resolve_tree(&self, spec: &str) -> Result<git2::Tree> {
+    fn resolve_tree(&self, spec: &str) -> Result<git2::Tree<'_>> {
         let obj = self.repo.revparse_single(spec)?;
         let commit = obj.peel_to_commit()?;
         Ok(commit.tree()?)
@@ -144,8 +139,6 @@ pub struct LineRange {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // Tests would require a git repository with commits
     // These are integration tests that should be run separately
 }

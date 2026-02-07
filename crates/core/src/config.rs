@@ -1,9 +1,9 @@
 //! Configuration file parsing for .revet.toml
 
-use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use std::collections::HashMap;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::Path;
 
 /// Main configuration structure for .revet.toml
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,13 +141,7 @@ fn default_format() -> String {
 
 impl Default for RevetConfig {
     fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            modules: ModulesConfig::default(),
-            ai: AIConfig::default(),
-            ignore: IgnoreConfig::default(),
-            output: OutputConfig::default(),
-        }
+        toml::from_str("").expect("empty TOML should parse to defaults")
     }
 }
 

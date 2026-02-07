@@ -1,9 +1,11 @@
 //! Python language parser using Tree-sitter
 
 use super::{LanguageParser, ParseError};
-use crate::graph::{CodeGraph, Node, NodeId, NodeKind, NodeData, Edge, EdgeKind, Parameter, EdgeMetadata};
-use std::path::Path;
+use crate::graph::{
+    CodeGraph, Edge, EdgeKind, EdgeMetadata, Node, NodeData, NodeId, NodeKind, Parameter,
+};
 use std::collections::HashMap;
+use std::path::Path;
 use tree_sitter::{Parser, Tree, TreeCursor};
 
 /// Python language parser
@@ -11,11 +13,17 @@ pub struct PythonParser {
     language: tree_sitter::Language,
 }
 
-impl PythonParser {
-    pub fn new() -> Self {
+impl Default for PythonParser {
+    fn default() -> Self {
         Self {
             language: tree_sitter_python::LANGUAGE.into(),
         }
+    }
+}
+
+impl PythonParser {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     fn create_parser(&self) -> Result<Parser, ParseError> {
@@ -47,7 +55,11 @@ impl PythonParser {
         // Create file node
         let file_node = Node::new(
             NodeKind::File,
-            file_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+            file_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
             file_path.to_path_buf(),
             0,
             NodeData::File {
@@ -63,7 +75,9 @@ impl PythonParser {
         for child in root_node.children(&mut cursor) {
             match child.kind() {
                 "function_definition" => {
-                    if let Some((node_id, name)) = self.extract_function(&child, source, file_path, graph, &mut function_nodes) {
+                    if let Some((node_id, name)) =
+                        self.extract_function(&child, source, file_path, graph, &mut function_nodes)
+                    {
                         graph.add_edge(file_node_id, node_id, Edge::new(EdgeKind::Contains));
                         function_nodes.insert(name, node_id);
                         node_ids.push(node_id);
@@ -73,22 +87,44 @@ impl PythonParser {
                     // Handle functions with decorators like @property, @staticmethod
                     if let Some(def_node) = child.child_by_field_name("definition") {
                         if def_node.kind() == "function_definition" {
-                            if let Some((node_id, name)) = self.extract_function(&def_node, source, file_path, graph, &mut function_nodes) {
-                                graph.add_edge(file_node_id, node_id, Edge::new(EdgeKind::Contains));
+                            if let Some((node_id, name)) = self.extract_function(
+                                &def_node,
+                                source,
+                                file_path,
+                                graph,
+                                &mut function_nodes,
+                            ) {
+                                graph.add_edge(
+                                    file_node_id,
+                                    node_id,
+                                    Edge::new(EdgeKind::Contains),
+                                );
                                 function_nodes.insert(name, node_id);
                                 node_ids.push(node_id);
                             }
                         } else if def_node.kind() == "class_definition" {
                             // Decorated classes
-                            if let Some(node_id) = self.extract_class(&def_node, source, file_path, graph, &mut function_nodes) {
-                                graph.add_edge(file_node_id, node_id, Edge::new(EdgeKind::Contains));
+                            if let Some(node_id) = self.extract_class(
+                                &def_node,
+                                source,
+                                file_path,
+                                graph,
+                                &mut function_nodes,
+                            ) {
+                                graph.add_edge(
+                                    file_node_id,
+                                    node_id,
+                                    Edge::new(EdgeKind::Contains),
+                                );
                                 node_ids.push(node_id);
                             }
                         }
                     }
                 }
                 "class_definition" => {
-                    if let Some(node_id) = self.extract_class(&child, source, file_path, graph, &mut function_nodes) {
+                    if let Some(node_id) =
+                        self.extract_class(&child, source, file_path, graph, &mut function_nodes)
+                    {
                         graph.add_edge(file_node_id, node_id, Edge::new(EdgeKind::Contains));
                         node_ids.push(node_id);
                     }
@@ -140,7 +176,14 @@ impl PythonParser {
 
         // Extract nested functions from the function body
         if let Some(body_node) = node.child_by_field_name("body") {
-            self.extract_nested_functions(&body_node, source, file_path, graph, function_nodes, node_id);
+            self.extract_nested_functions(
+                &body_node,
+                source,
+                file_path,
+                graph,
+                function_nodes,
+                node_id,
+            );
         }
 
         Some((node_id, name))
@@ -159,17 +202,33 @@ impl PythonParser {
         for child in body_node.children(&mut cursor) {
             match child.kind() {
                 "function_definition" => {
-                    if let Some((nested_id, _nested_name)) = self.extract_function(&child, source, file_path, graph, function_nodes) {
+                    if let Some((nested_id, _nested_name)) =
+                        self.extract_function(&child, source, file_path, graph, function_nodes)
+                    {
                         // Add Contains edge from parent function to nested function
-                        graph.add_edge(parent_function_id, nested_id, Edge::new(EdgeKind::Contains));
+                        graph.add_edge(
+                            parent_function_id,
+                            nested_id,
+                            Edge::new(EdgeKind::Contains),
+                        );
                     }
                 }
                 "decorated_definition" => {
                     // Handle nested decorated functions
                     if let Some(def_node) = child.child_by_field_name("definition") {
                         if def_node.kind() == "function_definition" {
-                            if let Some((nested_id, _nested_name)) = self.extract_function(&def_node, source, file_path, graph, function_nodes) {
-                                graph.add_edge(parent_function_id, nested_id, Edge::new(EdgeKind::Contains));
+                            if let Some((nested_id, _nested_name)) = self.extract_function(
+                                &def_node,
+                                source,
+                                file_path,
+                                graph,
+                                function_nodes,
+                            ) {
+                                graph.add_edge(
+                                    parent_function_id,
+                                    nested_id,
+                                    Edge::new(EdgeKind::Contains),
+                                );
                             }
                         }
                     }
@@ -194,7 +253,8 @@ impl PythonParser {
         let base_classes = self.extract_base_classes(node, source);
 
         // Extract methods and fields from class body
-        let (methods, fields) = self.extract_class_members(node, source, file_path, graph, &name, function_nodes);
+        let (methods, fields) =
+            self.extract_class_members(node, source, file_path, graph, &name, function_nodes);
 
         let mut class_node = Node::new(
             NodeKind::Class,
@@ -264,9 +324,13 @@ impl PythonParser {
                         // Handle decorated methods like @property, @staticmethod, @classmethod
                         if let Some(def_node) = child.child_by_field_name("definition") {
                             if def_node.kind() == "function_definition" {
-                                if let Some((method_node_id, method_name)) =
-                                    self.extract_function(&def_node, source, file_path, graph, function_nodes)
-                                {
+                                if let Some((method_node_id, method_name)) = self.extract_function(
+                                    &def_node,
+                                    source,
+                                    file_path,
+                                    graph,
+                                    function_nodes,
+                                ) {
                                     methods.push(method_name.clone());
                                     let qualified_name = format!("{}.{}", class_name, method_name);
                                     function_nodes.insert(qualified_name, method_node_id);
@@ -296,8 +360,8 @@ impl PythonParser {
                     if left.kind() == "attribute" {
                         // Check if it's self.field_name
                         if let Ok(text) = left.utf8_text(source.as_bytes()) {
-                            if text.starts_with("self.") {
-                                return Some(text[5..].to_string());
+                            if let Some(field) = text.strip_prefix("self.") {
+                                return Some(field.to_string());
                             }
                         }
                     }
@@ -376,7 +440,10 @@ impl PythonParser {
             for child in params_node.children(&mut cursor) {
                 // Only process known parameter node types
                 match child.kind() {
-                    "identifier" | "typed_parameter" | "default_parameter" | "typed_default_parameter" => {
+                    "identifier"
+                    | "typed_parameter"
+                    | "default_parameter"
+                    | "typed_default_parameter" => {
                         if let Some(param) = self.extract_single_parameter(&child, source) {
                             parameters.push(param);
                         }
@@ -408,7 +475,8 @@ impl PythonParser {
             "typed_parameter" => {
                 // Structure: identifier ":" type
                 // child[0] = identifier (name), child[2] = type
-                let name = node.child(0)?
+                let name = node
+                    .child(0)?
                     .utf8_text(source.as_bytes())
                     .ok()?
                     .to_string();
@@ -430,7 +498,8 @@ impl PythonParser {
             "default_parameter" => {
                 // Structure: identifier "=" value
                 // child[0] = identifier (name), child[2] = value
-                let name = node.child(0)?
+                let name = node
+                    .child(0)?
                     .utf8_text(source.as_bytes())
                     .ok()?
                     .to_string();
@@ -560,11 +629,17 @@ impl PythonParser {
         match function_node.kind() {
             "identifier" => {
                 // Simple function call: foo()
-                function_node.utf8_text(source.as_bytes()).ok().map(|s| s.to_string())
+                function_node
+                    .utf8_text(source.as_bytes())
+                    .ok()
+                    .map(|s| s.to_string())
             }
             "attribute" => {
                 // Method call: obj.method() or Class.method()
-                function_node.utf8_text(source.as_bytes()).ok().map(|s| s.to_string())
+                function_node
+                    .utf8_text(source.as_bytes())
+                    .ok()
+                    .map(|s| s.to_string())
             }
             _ => None,
         }
@@ -580,7 +655,11 @@ impl LanguageParser for PythonParser {
         &[".py", ".pyi"]
     }
 
-    fn parse_file(&self, file_path: &Path, graph: &mut CodeGraph) -> Result<Vec<NodeId>, ParseError> {
+    fn parse_file(
+        &self,
+        file_path: &Path,
+        graph: &mut CodeGraph,
+    ) -> Result<Vec<NodeId>, ParseError> {
         let source = std::fs::read_to_string(file_path)?;
         self.parse_source(&source, file_path, graph)
     }
@@ -609,12 +688,15 @@ def hello(name):
 "#;
         let mut graph = CodeGraph::new(PathBuf::from("/test"));
         let parser = PythonParser::new();
-        let nodes = parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+        let nodes = parser
+            .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+            .unwrap();
 
         assert!(!nodes.is_empty());
 
         // Verify function was extracted
-        let func_nodes: Vec<_> = graph.nodes()
+        let func_nodes: Vec<_> = graph
+            .nodes()
             .filter(|(_, n)| matches!(n.kind(), NodeKind::Function))
             .collect();
         assert_eq!(func_nodes.len(), 1);
@@ -629,14 +711,21 @@ def greet(name: str, age: int = 25) -> str:
 "#;
         let mut graph = CodeGraph::new(PathBuf::from("/test"));
         let parser = PythonParser::new();
-        parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+        parser
+            .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+            .unwrap();
 
-        let func_nodes: Vec<_> = graph.nodes()
+        let func_nodes: Vec<_> = graph
+            .nodes()
             .filter(|(_, n)| matches!(n.kind(), NodeKind::Function))
             .collect();
 
         assert_eq!(func_nodes.len(), 1);
-        if let NodeData::Function { parameters, return_type } = func_nodes[0].1.data() {
+        if let NodeData::Function {
+            parameters,
+            return_type,
+        } = func_nodes[0].1.data()
+        {
             assert_eq!(parameters.len(), 2);
 
             // First parameter: name: str
@@ -673,17 +762,28 @@ class Employee(Person):
 "#;
         let mut graph = CodeGraph::new(PathBuf::from("/test"));
         let parser = PythonParser::new();
-        parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+        parser
+            .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+            .unwrap();
 
-        let class_nodes: Vec<_> = graph.nodes()
+        let class_nodes: Vec<_> = graph
+            .nodes()
             .filter(|(_, n)| matches!(n.kind(), NodeKind::Class))
             .collect();
 
         assert_eq!(class_nodes.len(), 2);
 
         // Check Employee inherits from Person
-        let employee = class_nodes.iter().find(|(_, n)| n.name() == "Employee").unwrap();
-        if let NodeData::Class { base_classes, methods, .. } = employee.1.data() {
+        let employee = class_nodes
+            .iter()
+            .find(|(_, n)| n.name() == "Employee")
+            .unwrap();
+        if let NodeData::Class {
+            base_classes,
+            methods,
+            ..
+        } = employee.1.data()
+        {
             assert_eq!(base_classes, &vec!["Person".to_string()]);
             assert_eq!(methods.len(), 1);
             assert_eq!(methods[0], "__init__");
@@ -702,9 +802,12 @@ from typing import List, Dict
 "#;
         let mut graph = CodeGraph::new(PathBuf::from("/test"));
         let parser = PythonParser::new();
-        parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+        parser
+            .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+            .unwrap();
 
-        let import_nodes: Vec<_> = graph.nodes()
+        let import_nodes: Vec<_> = graph
+            .nodes()
             .filter(|(_, n)| matches!(n.kind(), NodeKind::Import))
             .collect();
 
@@ -722,10 +825,13 @@ def main():
 "#;
         let mut graph = CodeGraph::new(PathBuf::from("/test"));
         let parser = PythonParser::new();
-        parser.parse_source(source, &PathBuf::from("test.py"), &mut graph).unwrap();
+        parser
+            .parse_source(source, &PathBuf::from("test.py"), &mut graph)
+            .unwrap();
 
         // Find main and helper functions
-        let funcs: HashMap<String, NodeId> = graph.nodes()
+        let funcs: HashMap<String, NodeId> = graph
+            .nodes()
             .filter(|(_, n)| matches!(n.kind(), NodeKind::Function))
             .map(|(id, n)| (n.name().to_string(), id))
             .collect();
@@ -736,7 +842,8 @@ def main():
         let helper_id = funcs.get("helper").unwrap();
 
         // Check that main calls helper
-        let calls: Vec<_> = graph.edges_from(*main_id)
+        let calls: Vec<_> = graph
+            .edges_from(*main_id)
             .filter(|(_, e)| matches!(e.kind(), EdgeKind::Calls))
             .collect();
 

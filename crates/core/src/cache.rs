@@ -1,7 +1,7 @@
 //! Graph caching for incremental analysis
 
 use crate::graph::CodeGraph;
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -38,8 +38,7 @@ impl GraphCache {
 
     /// Ensure the cache directory exists
     fn ensure_cache_dir(&self) -> Result<()> {
-        std::fs::create_dir_all(&self.cache_dir)
-            .context("Failed to create cache directory")?;
+        std::fs::create_dir_all(&self.cache_dir).context("Failed to create cache directory")?;
         Ok(())
     }
 
@@ -125,7 +124,10 @@ impl GraphCache {
     }
 
     /// Build file checksums for all files in the repository
-    pub fn build_file_checksums(repo_root: &Path, file_paths: &[PathBuf]) -> Result<HashMap<PathBuf, String>> {
+    pub fn build_file_checksums(
+        repo_root: &Path,
+        file_paths: &[PathBuf],
+    ) -> Result<HashMap<PathBuf, String>> {
         let mut checksums = HashMap::new();
 
         for file_path in file_paths {
@@ -152,7 +154,8 @@ impl GraphCache {
             let full_path = if file_path.is_absolute() {
                 file_path.clone()
             } else {
-                self.cache_dir.parent()
+                self.cache_dir
+                    .parent()
                     .unwrap_or_else(|| Path::new("."))
                     .join(file_path)
             };
@@ -182,9 +185,9 @@ impl GraphCache {
 
         // Check if git commit hash matches (if available)
         if let Some(cached_hash) = &meta.commit_hash {
-            if let Some(current_hash) = Self::get_git_commit_hash(
-                self.cache_dir.parent().unwrap_or_else(|| Path::new("."))
-            ) {
+            if let Some(current_hash) =
+                Self::get_git_commit_hash(self.cache_dir.parent().unwrap_or_else(|| Path::new(".")))
+            {
                 if cached_hash != &current_hash {
                     return Ok(false);
                 }
@@ -200,9 +203,9 @@ impl GraphCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
-    use crate::graph::{Node, NodeKind, NodeData};
+    use crate::graph::{Node, NodeData, NodeKind};
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_cache_creation() {
@@ -246,7 +249,7 @@ mod tests {
 
         let (loaded_graph, loaded_meta) = loaded.unwrap();
         assert_eq!(loaded_meta.commit_hash, Some("abc123".to_string()));
-        
+
         // Verify the node was preserved
         let nodes: Vec<_> = loaded_graph.nodes().collect();
         assert_eq!(nodes.len(), 1);
@@ -279,19 +282,19 @@ mod tests {
     fn test_file_checksum_computation() {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test.txt");
-        
+
         fs::write(&file_path, "Hello, World!").unwrap();
-        
+
         let checksum1 = GraphCache::compute_file_checksum(&file_path).unwrap();
         let checksum2 = GraphCache::compute_file_checksum(&file_path).unwrap();
-        
+
         // Same file should have same checksum
         assert_eq!(checksum1, checksum2);
-        
+
         // Modify file
         fs::write(&file_path, "Hello, Rust!").unwrap();
         let checksum3 = GraphCache::compute_file_checksum(&file_path).unwrap();
-        
+
         // Modified file should have different checksum
         assert_ne!(checksum1, checksum3);
     }
@@ -299,20 +302,17 @@ mod tests {
     #[test]
     fn test_build_file_checksums() {
         let temp_dir = TempDir::new().unwrap();
-        
+
         // Create test files
         let file1 = temp_dir.path().join("file1.py");
         let file2 = temp_dir.path().join("file2.py");
         fs::write(&file1, "print('file1')").unwrap();
         fs::write(&file2, "print('file2')").unwrap();
 
-        let file_paths = vec![
-            PathBuf::from("file1.py"),
-            PathBuf::from("file2.py"),
-        ];
+        let file_paths = vec![PathBuf::from("file1.py"), PathBuf::from("file2.py")];
 
         let checksums = GraphCache::build_file_checksums(temp_dir.path(), &file_paths).unwrap();
-        
+
         assert_eq!(checksums.len(), 2);
         assert!(checksums.contains_key(&PathBuf::from("file1.py")));
         assert!(checksums.contains_key(&PathBuf::from("file2.py")));
@@ -330,10 +330,7 @@ mod tests {
         fs::write(&file2, "unchanged").unwrap();
 
         // Build initial checksums
-        let file_paths = vec![
-            PathBuf::from("file1.py"),
-            PathBuf::from("file2.py"),
-        ];
+        let file_paths = vec![PathBuf::from("file1.py"), PathBuf::from("file2.py")];
         let checksums = GraphCache::build_file_checksums(temp_dir.path(), &file_paths).unwrap();
 
         let meta = GraphCacheMeta {
@@ -365,10 +362,9 @@ mod tests {
         let file1 = temp_dir.path().join("file1.py");
         fs::write(&file1, "original").unwrap();
 
-        let checksums = GraphCache::build_file_checksums(
-            temp_dir.path(),
-            &[PathBuf::from("file1.py")]
-        ).unwrap();
+        let checksums =
+            GraphCache::build_file_checksums(temp_dir.path(), &[PathBuf::from("file1.py")])
+                .unwrap();
 
         let meta = GraphCacheMeta {
             commit_hash: None,

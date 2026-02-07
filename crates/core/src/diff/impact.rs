@@ -23,7 +23,10 @@ pub struct ImpactAnalysis {
 impl ImpactAnalysis {
     /// Create a new impact analyzer with old and new graphs
     pub fn new(old_graph: CodeGraph, new_graph: CodeGraph) -> Self {
-        Self { old_graph, new_graph }
+        Self {
+            old_graph,
+            new_graph,
+        }
     }
 
     /// Find all changed nodes by comparing old and new graphs
@@ -33,7 +36,7 @@ impl ImpactAnalysis {
         // Find nodes by file path and name
         for (new_node_id, new_node) in self.new_graph.nodes() {
             // Look for corresponding node in old graph
-            let old_node_id = self.find_matching_node_in_old(&new_node);
+            let old_node_id = self.find_matching_node_in_old(new_node);
 
             if let Some(old_id) = old_node_id {
                 // Node exists in both - check if it changed
@@ -55,9 +58,10 @@ impl ImpactAnalysis {
     fn find_matching_node_in_old(&self, new_node: &crate::graph::Node) -> Option<NodeId> {
         // Look through old graph for node with same path and name
         for (old_id, old_node) in self.old_graph.nodes() {
-            if old_node.file_path() == new_node.file_path() 
+            if old_node.file_path() == new_node.file_path()
                 && old_node.name() == new_node.name()
-                && old_node.kind() == new_node.kind() {
+                && old_node.kind() == new_node.kind()
+            {
                 return Some(old_id);
             }
         }
@@ -82,7 +86,10 @@ impl ImpactAnalysis {
             let direct_deps = self.new_graph.query().direct_dependents(new_node_id);
 
             // Find transitive dependents (up to depth 3) in the NEW graph
-            let transitive_deps = self.new_graph.query().transitive_dependents(new_node_id, Some(3));
+            let transitive_deps = self
+                .new_graph
+                .query()
+                .transitive_dependents(new_node_id, Some(3));
 
             report.add_changed_node(new_node_id, classification, direct_deps, transitive_deps);
         }
@@ -91,7 +98,11 @@ impl ImpactAnalysis {
     }
 
     /// Classify a change by comparing old and new node versions
-    fn classify_change(&self, new_node_id: NodeId, old_node_id: Option<NodeId>) -> ChangeClassification {
+    fn classify_change(
+        &self,
+        new_node_id: NodeId,
+        old_node_id: Option<NodeId>,
+    ) -> ChangeClassification {
         let new_node = match self.new_graph.node(new_node_id) {
             Some(n) => n,
             None => return ChangeClassification::Safe,
@@ -106,14 +117,35 @@ impl ImpactAnalysis {
         // Compare based on node type
         match (old_node.data(), new_node.data()) {
             (
-                crate::graph::NodeData::Function { parameters: old_params, return_type: old_ret },
-                crate::graph::NodeData::Function { parameters: new_params, return_type: new_ret },
+                crate::graph::NodeData::Function {
+                    parameters: old_params,
+                    return_type: old_ret,
+                },
+                crate::graph::NodeData::Function {
+                    parameters: new_params,
+                    return_type: new_ret,
+                },
             ) => self.compare_function_signatures(old_params, old_ret, new_params, new_ret),
 
             (
-                crate::graph::NodeData::Class { base_classes: old_bases, methods: old_methods, fields: old_fields },
-                crate::graph::NodeData::Class { base_classes: new_bases, methods: new_methods, fields: new_fields },
-            ) => self.compare_classes(old_bases, old_methods, old_fields, new_bases, new_methods, new_fields),
+                crate::graph::NodeData::Class {
+                    base_classes: old_bases,
+                    methods: old_methods,
+                    fields: old_fields,
+                },
+                crate::graph::NodeData::Class {
+                    base_classes: new_bases,
+                    methods: new_methods,
+                    fields: new_fields,
+                },
+            ) => self.compare_classes(
+                old_bases,
+                old_methods,
+                old_fields,
+                new_bases,
+                new_methods,
+                new_fields,
+            ),
 
             (crate::graph::NodeData::Type { .. }, crate::graph::NodeData::Type { .. }) => {
                 // Type changes are always breaking
@@ -121,8 +153,10 @@ impl ImpactAnalysis {
             }
 
             (
-                crate::graph::NodeData::Variable { is_constant: true, .. },
-                crate::graph::NodeData::Variable { .. }
+                crate::graph::NodeData::Variable {
+                    is_constant: true, ..
+                },
+                crate::graph::NodeData::Variable { .. },
             ) => {
                 // Constant changes are breaking
                 ChangeClassification::Breaking
@@ -152,7 +186,7 @@ impl ImpactAnalysis {
                 let new_params_have_defaults = new_params[old_params.len()..]
                     .iter()
                     .all(|p| p.default_value.is_some());
-                
+
                 if new_params_have_defaults {
                     return ChangeClassification::PotentiallyBreaking;
                 }
@@ -316,7 +350,7 @@ pub struct ImpactSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{Node, NodeData, NodeKind, Edge, EdgeKind};
+    use crate::graph::{Edge, EdgeKind, Node, NodeData, NodeKind};
     use std::path::PathBuf;
 
     #[test]
@@ -385,19 +419,20 @@ mod tests {
 
         // Should detect func_a as changed
         assert!(report.changes.len() >= 1);
-        
+
         // Should classify as breaking (signature changed)
         let breaking_changes: Vec<_> = report.breaking_changes().collect();
         assert!(breaking_changes.len() >= 1);
-        
+
         // Should find func_b as a dependent
-        let func_a_impact = &report.changes.iter()
-            .find(|c| {
-                analyzer.new_graph().node(c.node_id)
-                    .map(|n| n.name() == "func_a")
-                    .unwrap_or(false)
-            });
-        
+        let func_a_impact = &report.changes.iter().find(|c| {
+            analyzer
+                .new_graph()
+                .node(c.node_id)
+                .map(|n| n.name() == "func_a")
+                .unwrap_or(false)
+        });
+
         if let Some(impact) = func_a_impact {
             assert!(impact.direct_dependents.len() >= 1);
         }
@@ -427,11 +462,21 @@ mod tests {
             default_value: Some("0".to_string()),
         }];
 
-        let result = analyzer.compare_function_signatures(&old_params, &None, &new_params_with_default, &None);
+        let result = analyzer.compare_function_signatures(
+            &old_params,
+            &None,
+            &new_params_with_default,
+            &None,
+        );
         assert_eq!(result, ChangeClassification::PotentiallyBreaking);
 
         // Test 3: Return type changed = BREAKING
-        let result = analyzer.compare_function_signatures(&old_params, &None, &old_params, &Some("int".to_string()));
+        let result = analyzer.compare_function_signatures(
+            &old_params,
+            &None,
+            &old_params,
+            &Some("int".to_string()),
+        );
         assert_eq!(result, ChangeClassification::Breaking);
 
         // Test 4: No changes = SAFE
@@ -452,32 +497,52 @@ mod tests {
         // Test 1: Removed method = BREAKING
         let new_methods_removed = vec!["method_a".to_string()];
         let result = analyzer.compare_classes(
-            &old_bases, &old_methods, &old_fields,
-            &old_bases, &new_methods_removed, &old_fields
+            &old_bases,
+            &old_methods,
+            &old_fields,
+            &old_bases,
+            &new_methods_removed,
+            &old_fields,
         );
         assert_eq!(result, ChangeClassification::Breaking);
 
         // Test 2: Added method = SAFE
-        let new_methods_added = vec!["method_a".to_string(), "method_b".to_string(), "method_c".to_string()];
+        let new_methods_added = vec![
+            "method_a".to_string(),
+            "method_b".to_string(),
+            "method_c".to_string(),
+        ];
         let result = analyzer.compare_classes(
-            &old_bases, &old_methods, &old_fields,
-            &old_bases, &new_methods_added, &old_fields
+            &old_bases,
+            &old_methods,
+            &old_fields,
+            &old_bases,
+            &new_methods_added,
+            &old_fields,
         );
         assert_eq!(result, ChangeClassification::Safe);
 
         // Test 3: Changed base class = BREAKING
         let new_bases = vec!["NewBase".to_string()];
         let result = analyzer.compare_classes(
-            &old_bases, &old_methods, &old_fields,
-            &new_bases, &old_methods, &old_fields
+            &old_bases,
+            &old_methods,
+            &old_fields,
+            &new_bases,
+            &old_methods,
+            &old_fields,
         );
         assert_eq!(result, ChangeClassification::Breaking);
 
         // Test 4: Removed field = BREAKING
         let new_fields_removed = vec![];
         let result = analyzer.compare_classes(
-            &old_bases, &old_methods, &old_fields,
-            &old_bases, &old_methods, &new_fields_removed
+            &old_bases,
+            &old_methods,
+            &old_fields,
+            &old_bases,
+            &old_methods,
+            &new_fields_removed,
         );
         assert_eq!(result, ChangeClassification::Breaking);
     }

@@ -6,16 +6,16 @@
 //! - Git diff analysis and cross-file impact detection
 //! - Graph caching for incremental analysis
 
+pub mod cache;
+pub mod config;
+pub mod diff;
 pub mod graph;
 pub mod parser;
-pub mod diff;
-pub mod config;
-pub mod cache;
 
-pub use graph::{CodeGraph, Node, Edge, NodeId};
-pub use parser::{LanguageParser, ParserDispatcher, ParseError};
-pub use diff::{DiffAnalyzer, ImpactAnalysis, ChangeClassification};
 pub use config::RevetConfig;
+pub use diff::{ChangeClassification, DiffAnalyzer, ImpactAnalysis};
+pub use graph::{CodeGraph, Edge, Node, NodeId};
+pub use parser::{LanguageParser, ParseError, ParserDispatcher};
 
 /// Revet version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
