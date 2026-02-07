@@ -194,7 +194,6 @@ def main():
 }
 
 #[test]
-#[ignore] // TODO: Parser doesn't handle decorators yet - functions with decorators aren't extracted
 fn test_parse_decorators_and_annotations() {
     let source = r#"
 from typing import List, Optional
@@ -262,7 +261,6 @@ class DataProcessor:
 }
 
 #[test]
-#[ignore] // TODO: Parser doesn't extract nested functions yet - only top-level and class methods
 fn test_parse_nested_functions() {
     let source = r#"
 def outer(x):

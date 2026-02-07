@@ -63,10 +63,28 @@ impl PythonParser {
         for child in root_node.children(&mut cursor) {
             match child.kind() {
                 "function_definition" => {
-                    if let Some((node_id, name)) = self.extract_function(&child, source, file_path, graph) {
+                    if let Some((node_id, name)) = self.extract_function(&child, source, file_path, graph, &mut function_nodes) {
                         graph.add_edge(file_node_id, node_id, Edge::new(EdgeKind::Contains));
                         function_nodes.insert(name, node_id);
                         node_ids.push(node_id);
+                    }
+                }
+                "decorated_definition" => {
+                    // Handle functions with decorators like @property, @staticmethod
+                    if let Some(def_node) = child.child_by_field_name("definition") {
+                        if def_node.kind() == "function_definition" {
+                            if let Some((node_id, name)) = self.extract_function(&def_node, source, file_path, graph, &mut function_nodes) {
+                                graph.add_edge(file_node_id, node_id, Edge::new(EdgeKind::Contains));
+                                function_nodes.insert(name, node_id);
+                                node_ids.push(node_id);
+                            }
+                        } else if def_node.kind() == "class_definition" {
+                            // Decorated classes
+                            if let Some(node_id) = self.extract_class(&def_node, source, file_path, graph, &mut function_nodes) {
+                                graph.add_edge(file_node_id, node_id, Edge::new(EdgeKind::Contains));
+                                node_ids.push(node_id);
+                            }
+                        }
                     }
                 }
                 "class_definition" => {
@@ -97,6 +115,7 @@ impl PythonParser {
         source: &str,
         file_path: &Path,
         graph: &mut CodeGraph,
+        function_nodes: &mut HashMap<String, NodeId>,
     ) -> Option<(NodeId, String)> {
         let name_node = node.child_by_field_name("name")?;
         let name = name_node.utf8_text(source.as_bytes()).ok()?.to_string();
@@ -117,7 +136,47 @@ impl PythonParser {
         func_node.set_end_line(node.end_position().row + 1);
 
         let node_id = graph.add_node(func_node);
+        function_nodes.insert(name.clone(), node_id);
+
+        // Extract nested functions from the function body
+        if let Some(body_node) = node.child_by_field_name("body") {
+            self.extract_nested_functions(&body_node, source, file_path, graph, function_nodes, node_id);
+        }
+
         Some((node_id, name))
+    }
+
+    fn extract_nested_functions(
+        &self,
+        body_node: &tree_sitter::Node,
+        source: &str,
+        file_path: &Path,
+        graph: &mut CodeGraph,
+        function_nodes: &mut HashMap<String, NodeId>,
+        parent_function_id: NodeId,
+    ) {
+        let mut cursor = body_node.walk();
+        for child in body_node.children(&mut cursor) {
+            match child.kind() {
+                "function_definition" => {
+                    if let Some((nested_id, _nested_name)) = self.extract_function(&child, source, file_path, graph, function_nodes) {
+                        // Add Contains edge from parent function to nested function
+                        graph.add_edge(parent_function_id, nested_id, Edge::new(EdgeKind::Contains));
+                    }
+                }
+                "decorated_definition" => {
+                    // Handle nested decorated functions
+                    if let Some(def_node) = child.child_by_field_name("definition") {
+                        if def_node.kind() == "function_definition" {
+                            if let Some((nested_id, _nested_name)) = self.extract_function(&def_node, source, file_path, graph, function_nodes) {
+                                graph.add_edge(parent_function_id, nested_id, Edge::new(EdgeKind::Contains));
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     fn extract_class(
@@ -193,12 +252,26 @@ impl PythonParser {
                 match child.kind() {
                     "function_definition" => {
                         if let Some((method_node_id, method_name)) =
-                            self.extract_function(&child, source, file_path, graph)
+                            self.extract_function(&child, source, file_path, graph, function_nodes)
                         {
                             methods.push(method_name.clone());
                             // Store qualified name for call resolution
                             let qualified_name = format!("{}.{}", class_name, method_name);
                             function_nodes.insert(qualified_name, method_node_id);
+                        }
+                    }
+                    "decorated_definition" => {
+                        // Handle decorated methods like @property, @staticmethod, @classmethod
+                        if let Some(def_node) = child.child_by_field_name("definition") {
+                            if def_node.kind() == "function_definition" {
+                                if let Some((method_node_id, method_name)) =
+                                    self.extract_function(&def_node, source, file_path, graph, function_nodes)
+                                {
+                                    methods.push(method_name.clone());
+                                    let qualified_name = format!("{}.{}", class_name, method_name);
+                                    function_nodes.insert(qualified_name, method_node_id);
+                                }
+                            }
                         }
                     }
                     "expression_statement" => {
