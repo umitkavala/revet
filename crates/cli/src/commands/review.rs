@@ -3,8 +3,8 @@
 use anyhow::Result;
 use colored::Colorize;
 use revet_core::{
-    discover_files, CodeGraph, DiffAnalyzer, Finding, GraphCache, GraphCacheMeta, ImpactAnalysis,
-    ParserDispatcher, RevetConfig, ReviewSummary, Severity,
+    discover_files, AnalyzerDispatcher, CodeGraph, DiffAnalyzer, Finding, GraphCache,
+    GraphCacheMeta, ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary, Severity,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -130,6 +130,20 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<()> {
             affected_dependents: 0,
         });
     }
+
+    // ── 4b. Domain Analyzers ─────────────────────────────────────
+    print!("  Running domain analyzers... ");
+    let analyzer_start = Instant::now();
+    let analyzer_dispatcher = AnalyzerDispatcher::new();
+    let analyzer_findings = analyzer_dispatcher.run_all(&files, &repo_path, &config);
+    let analyzer_count = analyzer_findings.len();
+    findings.extend(analyzer_findings);
+    println!(
+        "{} — {} finding(s) ({:.1}s)",
+        "done".green(),
+        analyzer_count,
+        analyzer_start.elapsed().as_secs_f64()
+    );
 
     // ── 5. Save Cache ────────────────────────────────────────────
     let file_paths: Vec<PathBuf> = files

@@ -1,0 +1,107 @@
+//! Domain analyzers for detecting patterns beyond AST-level analysis
+//!
+//! Analyzers operate on raw file content (not the code graph) and produce
+//! [`Finding`]s. Each analyzer is independent and can be enabled/disabled
+//! via `.revet.toml`.
+
+pub mod secret_exposure;
+
+use crate::config::RevetConfig;
+use crate::finding::{Finding, Severity};
+use std::path::{Path, PathBuf};
+
+/// Trait for domain-specific analyzers
+///
+/// Analyzers scan raw file content for patterns that don't require AST parsing
+/// (e.g., hardcoded secrets, configuration issues). For analyzers that need
+/// the code graph, a separate `GraphAnalyzer` trait can be introduced later.
+pub trait Analyzer: Send + Sync {
+    /// Human-readable name of this analyzer
+    fn name(&self) -> &str;
+
+    /// Finding ID prefix (e.g., "SEC" produces "SEC-001", "SEC-002", ...)
+    fn finding_prefix(&self) -> &str;
+
+    /// Whether this analyzer is enabled given the current config
+    fn is_enabled(&self, config: &RevetConfig) -> bool;
+
+    /// Analyze the given files and return findings
+    ///
+    /// `repo_root` is the absolute path to the repository root, used to
+    /// produce relative file paths in findings.
+    fn analyze_files(&self, files: &[PathBuf], repo_root: &Path) -> Vec<Finding>;
+}
+
+/// Dispatches analysis across all registered analyzers
+pub struct AnalyzerDispatcher {
+    analyzers: Vec<Box<dyn Analyzer>>,
+}
+
+impl AnalyzerDispatcher {
+    /// Create a new dispatcher with all built-in analyzers
+    pub fn new() -> Self {
+        Self {
+            analyzers: vec![Box::new(secret_exposure::SecretExposureAnalyzer::new())],
+        }
+    }
+
+    /// Run all enabled analyzers and return combined findings
+    ///
+    /// Finding IDs are renumbered per-prefix to ensure sequential ordering
+    /// (e.g., SEC-001, SEC-002, ...).
+    pub fn run_all(
+        &self,
+        files: &[PathBuf],
+        repo_root: &Path,
+        config: &RevetConfig,
+    ) -> Vec<Finding> {
+        let mut all_findings = Vec::new();
+
+        for analyzer in &self.analyzers {
+            if !analyzer.is_enabled(config) {
+                continue;
+            }
+
+            let mut findings = analyzer.analyze_files(files, repo_root);
+            let prefix = analyzer.finding_prefix();
+
+            // Renumber finding IDs sequentially
+            for (i, finding) in findings.iter_mut().enumerate() {
+                finding.id = format!("{}-{:03}", prefix, i + 1);
+            }
+
+            // Filter out suppressed findings
+            let findings: Vec<Finding> = findings
+                .into_iter()
+                .filter(|f| !config.ignore.findings.contains(&f.id))
+                .collect();
+
+            all_findings.extend(findings);
+        }
+
+        all_findings
+    }
+}
+
+impl Default for AnalyzerDispatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Helper to create a finding with common defaults
+pub(crate) fn make_finding(
+    severity: Severity,
+    message: String,
+    file: PathBuf,
+    line: usize,
+) -> Finding {
+    Finding {
+        id: String::new(), // Renumbered by dispatcher
+        severity,
+        message,
+        file,
+        line,
+        affected_dependents: 0,
+    }
+}

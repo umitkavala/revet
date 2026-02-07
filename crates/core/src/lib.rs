@@ -6,6 +6,7 @@
 //! - Git diff analysis and cross-file impact detection
 //! - Graph caching for incremental analysis
 
+pub mod analyzer;
 pub mod cache;
 pub mod config;
 pub mod diff;
@@ -14,6 +15,7 @@ pub mod finding;
 pub mod graph;
 pub mod parser;
 
+pub use analyzer::{Analyzer, AnalyzerDispatcher};
 pub use cache::{GraphCache, GraphCacheMeta};
 pub use config::RevetConfig;
 pub use diff::{ChangeClassification, ChangeImpact, DiffAnalyzer, ImpactAnalysis, ImpactSummary};
