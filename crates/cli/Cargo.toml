@@ -1,0 +1,25 @@
+[package]
+name = "revet"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Code review agent with deterministic analysis and selective LLM reasoning"
+
+[[bin]]
+name = "revet"
+path = "src/main.rs"
+
+[dependencies]
+revet-core = { path = "../core" }
+clap.workspace = true
+colored.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+indicatif.workspace = true
+glob.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

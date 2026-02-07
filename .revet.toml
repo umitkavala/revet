@@ -1,0 +1,35 @@
+# Revet Configuration (Dogfooding - we use Revet on ourselves!)
+
+[general]
+languages = ["rust", "python"]
+diff_base = "main"
+fail_on = "error"
+
+[modules]
+# We focus on code quality and security for our own codebase
+ml = false  # No ML code in Revet itself
+security = true
+infra = false
+
+[ai]
+# LLM configuration for development
+provider = "anthropic"
+model = "claude-sonnet-4-20250514"
+max_cost_per_run = 0.50
+
+[ignore]
+paths = [
+    "target/",
+    ".git/",
+    "dist/",
+    "node_modules/",
+    "__pycache__/",
+    ".revet-cache/",
+]
+findings = []
+
+[output]
+format = "terminal"
+color = true
+show_evidence = true
+max_findings = 0

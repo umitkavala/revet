@@ -1,0 +1,258 @@
+//! Configuration file parsing for .revet.toml
+
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use anyhow::Result;
+
+/// Main configuration structure for .revet.toml
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevetConfig {
+    #[serde(default)]
+    pub general: GeneralConfig,
+
+    #[serde(default)]
+    pub modules: ModulesConfig,
+
+    #[serde(default)]
+    pub ai: AIConfig,
+
+    #[serde(default)]
+    pub ignore: IgnoreConfig,
+
+    #[serde(default)]
+    pub output: OutputConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeneralConfig {
+    /// Languages to analyze (auto-detected if empty)
+    #[serde(default)]
+    pub languages: Vec<String>,
+
+    /// Default diff base
+    #[serde(default = "default_diff_base")]
+    pub diff_base: String,
+
+    /// Severity threshold for non-zero exit code
+    #[serde(default = "default_fail_on")]
+    pub fail_on: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModulesConfig {
+    /// Enable/disable domain modules
+    #[serde(default = "default_true")]
+    pub ml: bool,
+
+    #[serde(default = "default_true")]
+    pub security: bool,
+
+    #[serde(default)]
+    pub infra: bool,
+
+    /// Module-specific configurations
+    #[serde(flatten)]
+    pub module_configs: HashMap<String, toml::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AIConfig {
+    /// LLM provider
+    #[serde(default = "default_provider")]
+    pub provider: String,
+
+    /// Model name
+    #[serde(default = "default_model")]
+    pub model: String,
+
+    /// Max cost per run in USD
+    #[serde(default = "default_max_cost")]
+    pub max_cost_per_run: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IgnoreConfig {
+    /// Paths to ignore
+    #[serde(default = "default_ignore_paths")]
+    pub paths: Vec<String>,
+
+    /// Finding IDs to suppress
+    #[serde(default)]
+    pub findings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutputConfig {
+    /// Default output format
+    #[serde(default = "default_format")]
+    pub format: String,
+
+    /// Enable color output
+    #[serde(default = "default_true")]
+    pub color: bool,
+
+    /// Show evidence snippets
+    #[serde(default = "default_true")]
+    pub show_evidence: bool,
+
+    /// Max findings to display (0 = unlimited)
+    #[serde(default)]
+    pub max_findings: usize,
+}
+
+// Default functions
+fn default_diff_base() -> String {
+    "main".to_string()
+}
+
+fn default_fail_on() -> String {
+    "error".to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_provider() -> String {
+    "anthropic".to_string()
+}
+
+fn default_model() -> String {
+    "claude-sonnet-4-20250514".to_string()
+}
+
+fn default_max_cost() -> f64 {
+    1.0
+}
+
+fn default_ignore_paths() -> Vec<String> {
+    vec![
+        "vendor/".to_string(),
+        "node_modules/".to_string(),
+        "dist/".to_string(),
+        ".git/".to_string(),
+    ]
+}
+
+fn default_format() -> String {
+    "terminal".to_string()
+}
+
+impl Default for RevetConfig {
+    fn default() -> Self {
+        Self {
+            general: GeneralConfig::default(),
+            modules: ModulesConfig::default(),
+            ai: AIConfig::default(),
+            ignore: IgnoreConfig::default(),
+            output: OutputConfig::default(),
+        }
+    }
+}
+
+impl Default for GeneralConfig {
+    fn default() -> Self {
+        Self {
+            languages: Vec::new(),
+            diff_base: default_diff_base(),
+            fail_on: default_fail_on(),
+        }
+    }
+}
+
+impl Default for ModulesConfig {
+    fn default() -> Self {
+        Self {
+            ml: true,
+            security: true,
+            infra: false,
+            module_configs: HashMap::new(),
+        }
+    }
+}
+
+impl Default for AIConfig {
+    fn default() -> Self {
+        Self {
+            provider: default_provider(),
+            model: default_model(),
+            max_cost_per_run: default_max_cost(),
+        }
+    }
+}
+
+impl Default for IgnoreConfig {
+    fn default() -> Self {
+        Self {
+            paths: default_ignore_paths(),
+            findings: Vec::new(),
+        }
+    }
+}
+
+impl Default for OutputConfig {
+    fn default() -> Self {
+        Self {
+            format: default_format(),
+            color: true,
+            show_evidence: true,
+            max_findings: 0,
+        }
+    }
+}
+
+impl RevetConfig {
+    /// Load configuration from a file
+    pub fn from_file(path: &Path) -> Result<Self> {
+        let contents = std::fs::read_to_string(path)?;
+        let config: RevetConfig = toml::from_str(&contents)?;
+        Ok(config)
+    }
+
+    /// Find and load .revet.toml from the current directory or ancestors
+    pub fn find_and_load(start_dir: &Path) -> Result<Self> {
+        let mut current = start_dir;
+
+        loop {
+            let config_path = current.join(".revet.toml");
+            if config_path.exists() {
+                return Self::from_file(&config_path);
+            }
+
+            match current.parent() {
+                Some(parent) => current = parent,
+                None => break,
+            }
+        }
+
+        // No config found, use defaults
+        Ok(Self::default())
+    }
+
+    /// Save configuration to a file
+    pub fn save(&self, path: &Path) -> Result<()> {
+        let contents = toml::to_string_pretty(self)?;
+        std::fs::write(path, contents)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = RevetConfig::default();
+        assert_eq!(config.general.diff_base, "main");
+        assert!(config.modules.security);
+    }
+
+    #[test]
+    fn test_serialize_config() {
+        let config = RevetConfig::default();
+        let toml_str = toml::to_string(&config).unwrap();
+        assert!(toml_str.contains("diff_base"));
+    }
+}
