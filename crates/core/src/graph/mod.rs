@@ -5,7 +5,7 @@ pub mod edges;
 pub mod query;
 
 pub use nodes::{Node, NodeKind, NodeData, Parameter};
-pub use edges::{Edge, EdgeKind};
+pub use edges::{Edge, EdgeKind, EdgeMetadata};
 pub use query::GraphQuery;
 
 use petgraph::graph::{DiGraph, NodeIndex};

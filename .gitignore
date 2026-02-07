@@ -37,6 +37,7 @@ wheels/
 *~
 .DS_Store
 .claude/
+CLAUDE.md
 
 # Revet cache
 .revet-cache/
