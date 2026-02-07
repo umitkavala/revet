@@ -5,6 +5,7 @@
 //! via `.revet.toml`.
 
 pub mod secret_exposure;
+pub mod sql_injection;
 
 use crate::config::RevetConfig;
 use crate::finding::{Finding, Severity};
@@ -41,7 +42,10 @@ impl AnalyzerDispatcher {
     /// Create a new dispatcher with all built-in analyzers
     pub fn new() -> Self {
         Self {
-            analyzers: vec![Box::new(secret_exposure::SecretExposureAnalyzer::new())],
+            analyzers: vec![
+                Box::new(secret_exposure::SecretExposureAnalyzer::new()),
+                Box::new(sql_injection::SqlInjectionAnalyzer::new()),
+            ],
         }
     }
 
