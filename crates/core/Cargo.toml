@@ -7,7 +7,12 @@ license.workspace = true
 repository.workspace = true
 description = "Core code intelligence graph engine for Revet"
 
+[features]
+default = []
+cozo-store = ["cozo-ce"]
+
 [dependencies]
+cozo-ce = { workspace = true, optional = true }
 tree-sitter.workspace = true
 tree-sitter-python.workspace = true
 tree-sitter-typescript.workspace = true

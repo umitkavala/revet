@@ -14,6 +14,7 @@ pub mod discovery;
 pub mod finding;
 pub mod graph;
 pub mod parser;
+pub mod store;
 
 pub use analyzer::{Analyzer, AnalyzerDispatcher};
 pub use cache::{GraphCache, GraphCacheMeta};

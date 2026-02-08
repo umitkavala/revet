@@ -37,6 +37,7 @@ toml = "0.8"
 anyhow = "1"
 thiserror = "2"
 indicatif = "0.17"
+cozo-ce = { version = "0.7", default-features = false, features = ["minimal", "rayon", "requests"] }
 
 [profile.release]
 lto = true
