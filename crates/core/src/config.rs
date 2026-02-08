@@ -132,6 +132,18 @@ fn default_ignore_paths() -> Vec<String> {
         "node_modules/".to_string(),
         "dist/".to_string(),
         ".git/".to_string(),
+        "__pycache__/".to_string(),
+        ".venv/".to_string(),
+        "venv/".to_string(),
+        "env/".to_string(),
+        "site-packages/".to_string(),
+        "build/".to_string(),
+        "target/".to_string(),
+        ".tox/".to_string(),
+        ".eggs/".to_string(),
+        ".mypy_cache/".to_string(),
+        ".pytest_cache/".to_string(),
+        ".revet-cache/".to_string(),
     ]
 }
 
