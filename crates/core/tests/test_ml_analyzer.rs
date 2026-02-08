@@ -26,11 +26,7 @@ fn default_config() -> RevetConfig {
 #[test]
 fn test_detects_fit_on_x_test() {
     let dir = TempDir::new().unwrap();
-    let file = write_temp_file(
-        &dir,
-        "train.py",
-        "scaler.fit(X_test)\n",
-    );
+    let file = write_temp_file(&dir, "train.py", "scaler.fit(X_test)\n");
 
     let analyzer = MlPipelineAnalyzer::new();
     let findings = analyzer.analyze_files(&[file], dir.path());
@@ -44,11 +40,7 @@ fn test_detects_fit_on_x_test() {
 #[test]
 fn test_detects_fit_transform_on_test_data() {
     let dir = TempDir::new().unwrap();
-    let file = write_temp_file(
-        &dir,
-        "pipeline.py",
-        "scaler.fit_transform(test_features)\n",
-    );
+    let file = write_temp_file(&dir, "pipeline.py", "scaler.fit_transform(test_features)\n");
 
     let analyzer = MlPipelineAnalyzer::new();
     let findings = analyzer.analyze_files(&[file], dir.path());
@@ -61,11 +53,7 @@ fn test_detects_fit_transform_on_test_data() {
 #[test]
 fn test_detects_fit_on_test_labels() {
     let dir = TempDir::new().unwrap();
-    let file = write_temp_file(
-        &dir,
-        "train.py",
-        "encoder.fit(y_test)\n",
-    );
+    let file = write_temp_file(&dir, "train.py", "encoder.fit(y_test)\n");
 
     let analyzer = MlPipelineAnalyzer::new();
     let findings = analyzer.analyze_files(&[file], dir.path());
@@ -108,8 +96,15 @@ fn test_no_warning_train_test_split_with_random_state() {
 
     // Should NOT get a Warning for missing random_state
     // May get Info for missing stratify (pattern 7)
-    let warnings: Vec<_> = findings.iter().filter(|f| f.severity == Severity::Warning).collect();
-    assert!(warnings.is_empty(), "Should not warn when random_state is present, got: {:?}", warnings);
+    let warnings: Vec<_> = findings
+        .iter()
+        .filter(|f| f.severity == Severity::Warning)
+        .collect();
+    assert!(
+        warnings.is_empty(),
+        "Should not warn when random_state is present, got: {:?}",
+        warnings
+    );
 }
 
 #[test]
@@ -126,7 +121,9 @@ fn test_detects_fit_transform_on_full_dataset() {
 
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].severity, Severity::Warning);
-    assert!(findings[0].message.contains("fit_transform on full dataset"));
+    assert!(findings[0]
+        .message
+        .contains("fit_transform on full dataset"));
 }
 
 #[test]
@@ -219,7 +216,10 @@ fn test_detects_missing_stratify() {
 
     // Pattern 3 (Warning, no random_state) won't fire because random_state IS present
     // Pattern 7 (Info, no stratify) SHOULD fire because random_state is present but no stratify
-    let info: Vec<_> = findings.iter().filter(|f| f.severity == Severity::Info).collect();
+    let info: Vec<_> = findings
+        .iter()
+        .filter(|f| f.severity == Severity::Info)
+        .collect();
     assert_eq!(info.len(), 1);
     assert!(info[0].message.contains("without stratify"));
 }
@@ -265,11 +265,7 @@ fn test_detects_deprecated_sklearn_import() {
 #[test]
 fn test_skips_non_python_files() {
     let dir = TempDir::new().unwrap();
-    let file = write_temp_file(
-        &dir,
-        "train.js",
-        "scaler.fit(X_test)\n",
-    );
+    let file = write_temp_file(&dir, "train.js", "scaler.fit(X_test)\n");
 
     let analyzer = MlPipelineAnalyzer::new();
     let findings = analyzer.analyze_files(&[file], dir.path());

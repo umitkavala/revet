@@ -113,12 +113,8 @@ fn test_compare_function_signatures() {
         default_value: Some("0".to_string()),
     }];
 
-    let result = analyzer.compare_function_signatures(
-        &old_params,
-        &None,
-        &new_params_with_default,
-        &None,
-    );
+    let result =
+        analyzer.compare_function_signatures(&old_params, &None, &new_params_with_default, &None);
     assert_eq!(result, ChangeClassification::PotentiallyBreaking);
 
     // Test 3: Return type changed = BREAKING

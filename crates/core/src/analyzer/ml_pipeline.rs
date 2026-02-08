@@ -114,10 +114,10 @@ const ML_EXTENSIONS: &[&str] = &["py", "ipynb"];
 
 /// Binary file extensions to skip
 const BINARY_EXTENSIONS: &[&str] = &[
-    "png", "jpg", "jpeg", "gif", "bmp", "ico", "svg", "webp", "woff", "woff2", "ttf", "eot",
-    "otf", "zip", "gz", "tar", "bz2", "xz", "7z", "rar", "pdf", "doc", "docx", "xls", "xlsx",
-    "ppt", "pptx", "exe", "dll", "so", "dylib", "o", "a", "pyc", "pyo", "class", "lock", "mp3",
-    "mp4", "avi", "mov", "wav", "flac", "sqlite", "db",
+    "png", "jpg", "jpeg", "gif", "bmp", "ico", "svg", "webp", "woff", "woff2", "ttf", "eot", "otf",
+    "zip", "gz", "tar", "bz2", "xz", "7z", "rar", "pdf", "doc", "docx", "xls", "xlsx", "ppt",
+    "pptx", "exe", "dll", "so", "dylib", "o", "a", "pyc", "pyo", "class", "lock", "mp3", "mp4",
+    "avi", "mov", "wav", "flac", "sqlite", "db",
 ];
 
 /// Analyzer that detects ML pipeline anti-patterns
