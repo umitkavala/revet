@@ -18,7 +18,9 @@ pub mod parser;
 pub use analyzer::{Analyzer, AnalyzerDispatcher};
 pub use cache::{GraphCache, GraphCacheMeta};
 pub use config::RevetConfig;
-pub use diff::{ChangeClassification, ChangeImpact, DiffAnalyzer, ImpactAnalysis, ImpactSummary};
+pub use diff::{
+    ChangeClassification, ChangeImpact, DiffAnalyzer, GitTreeReader, ImpactAnalysis, ImpactSummary,
+};
 pub use discovery::discover_files;
 pub use finding::{Finding, ReviewSummary, Severity};
 pub use graph::{CodeGraph, Edge, Node, NodeData, NodeId, NodeKind};

@@ -1,7 +1,9 @@
 //! Git diff analysis and cross-file impact detection
 
+pub mod blob;
 pub mod impact;
 
+pub use blob::GitTreeReader;
 pub use impact::{ChangeClassification, ChangeImpact, ImpactAnalysis, ImpactReport, ImpactSummary};
 
 use anyhow::{Context, Result};

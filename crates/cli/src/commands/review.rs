@@ -3,8 +3,9 @@
 use anyhow::Result;
 use colored::Colorize;
 use revet_core::{
-    discover_files, AnalyzerDispatcher, CodeGraph, DiffAnalyzer, Finding, GraphCache,
-    GraphCacheMeta, ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary, Severity,
+    discover_files, AnalyzerDispatcher, CodeGraph, DiffAnalyzer, Finding, GitTreeReader,
+    GraphCache, GraphCacheMeta, ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary,
+    Severity,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -64,13 +65,13 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<()> {
     let mut findings: Vec<Finding> = Vec::new();
 
     let cache = GraphCache::new(&repo_path);
-    let old_graph = cache.load().ok().flatten();
+    let old_graph = load_old_graph(&cache, &repo_path, cli, &config, &dispatcher);
 
-    if let Some((cached_graph, _meta)) = old_graph {
+    if let Some(baseline) = old_graph {
         print!("  Running impact analysis... ");
         let impact_start = Instant::now();
 
-        let analysis = ImpactAnalysis::new(cached_graph, graph.clone());
+        let analysis = ImpactAnalysis::new(baseline, graph.clone());
         let report = analysis.analyze_impact();
 
         for change in &report.changes {
@@ -115,7 +116,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<()> {
     } else {
         println!(
             "  {} — run again to compare changes",
-            "No cached graph found, skipping impact analysis".dimmed()
+            "No baseline graph available, skipping impact analysis".dimmed()
         );
     }
 
@@ -176,6 +177,42 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<()> {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
+
+/// Load the old (baseline) graph for impact analysis.
+///
+/// Fallback chain: cache → git blobs → None
+fn load_old_graph(
+    cache: &GraphCache,
+    repo_path: &Path,
+    cli: &crate::Cli,
+    config: &RevetConfig,
+    dispatcher: &ParserDispatcher,
+) -> Option<CodeGraph> {
+    // 1. Try cache (fast path)
+    if let Ok(Some((cached_graph, _meta))) = cache.load() {
+        return Some(cached_graph);
+    }
+
+    // 2. Try building from git blobs at the base ref
+    let base = cli.diff.as_deref().unwrap_or(&config.general.diff_base);
+    match GitTreeReader::new(repo_path) {
+        Ok(reader) => {
+            print!("  Building baseline graph from git ({})... ", base);
+            match reader.build_graph_at_ref(base, repo_path, dispatcher) {
+                Ok(blob_graph) => {
+                    let node_count: usize = blob_graph.nodes().count();
+                    println!("{} ({} nodes)", "done".green(), node_count);
+                    Some(blob_graph)
+                }
+                Err(e) => {
+                    println!("{}", format!("failed: {}", e).dimmed());
+                    None
+                }
+            }
+        }
+        Err(_) => None,
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 enum Format {
