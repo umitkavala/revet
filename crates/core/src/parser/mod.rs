@@ -1,6 +1,7 @@
 //! Language parsers for building the code graph from source files
 
 pub mod go;
+pub mod java;
 pub mod python;
 pub mod typescript;
 
@@ -66,6 +67,7 @@ impl ParserDispatcher {
         Self {
             parsers: vec![
                 Box::new(go::GoParser::new()),
+                Box::new(java::JavaParser::new()),
                 Box::new(python::PythonParser::new()),
                 Box::new(typescript::TypeScriptParser::new()),
             ],
