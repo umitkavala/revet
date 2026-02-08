@@ -4,6 +4,7 @@
 //! [`Finding`]s. Each analyzer is independent and can be enabled/disabled
 //! via `.revet.toml`.
 
+pub mod ml_pipeline;
 pub mod secret_exposure;
 pub mod sql_injection;
 
@@ -45,6 +46,7 @@ impl AnalyzerDispatcher {
             analyzers: vec![
                 Box::new(secret_exposure::SecretExposureAnalyzer::new()),
                 Box::new(sql_injection::SqlInjectionAnalyzer::new()),
+                Box::new(ml_pipeline::MlPipelineAnalyzer::new()),
             ],
         }
     }
