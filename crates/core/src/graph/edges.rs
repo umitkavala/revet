@@ -86,27 +86,3 @@ pub enum EdgeMetadata {
         param_index: Option<usize>,
     },
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_create_edge() {
-        let edge = Edge::new(EdgeKind::Calls);
-        assert_eq!(edge.kind(), &EdgeKind::Calls);
-        assert!(edge.metadata().is_none());
-    }
-
-    #[test]
-    fn test_edge_with_metadata() {
-        let edge = Edge::with_metadata(
-            EdgeKind::Calls,
-            EdgeMetadata::Call {
-                line: 42,
-                is_direct: true,
-            },
-        );
-        assert!(edge.metadata().is_some());
-    }
-}

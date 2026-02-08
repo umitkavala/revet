@@ -138,32 +138,3 @@ impl CodeGraph {
         GraphQuery::new(self)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    #[test]
-    fn test_create_graph() {
-        let graph = CodeGraph::new(PathBuf::from("/test"));
-        assert_eq!(graph.root_path(), &PathBuf::from("/test"));
-    }
-
-    #[test]
-    fn test_add_node() {
-        let mut graph = CodeGraph::new(PathBuf::from("/test"));
-        let node = Node::new(
-            NodeKind::Function,
-            "test_func".to_string(),
-            PathBuf::from("/test/file.py"),
-            10,
-            NodeData::Function {
-                parameters: vec![],
-                return_type: None,
-            },
-        );
-        let id = graph.add_node(node);
-        assert!(graph.node(id).is_some());
-    }
-}

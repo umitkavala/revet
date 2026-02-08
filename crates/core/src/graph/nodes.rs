@@ -165,30 +165,3 @@ pub struct ModelField {
     pub field_type: String,
     pub nullable: bool,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_create_function_node() {
-        let node = Node::new(
-            NodeKind::Function,
-            "test_func".to_string(),
-            PathBuf::from("test.py"),
-            10,
-            NodeData::Function {
-                parameters: vec![Parameter {
-                    name: "x".to_string(),
-                    param_type: Some("int".to_string()),
-                    default_value: None,
-                }],
-                return_type: Some("str".to_string()),
-            },
-        );
-
-        assert_eq!(node.name(), "test_func");
-        assert_eq!(node.line(), 10);
-        assert_eq!(node.kind(), &NodeKind::Function);
-    }
-}

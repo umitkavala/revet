@@ -136,9 +136,3 @@ pub struct LineRange {
     pub start: usize,
     pub end: usize,
 }
-
-#[cfg(test)]
-mod tests {
-    // Tests would require a git repository with commits
-    // These are integration tests that should be run separately
-}
