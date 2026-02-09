@@ -3,9 +3,9 @@
 use anyhow::Result;
 use colored::Colorize;
 use revet_core::{
-    discover_files, discover_files_extended, AnalyzerDispatcher, CodeGraph, DiffAnalyzer, Finding,
-    GitTreeReader, GraphCache, GraphCacheMeta, ImpactAnalysis, ParserDispatcher, RevetConfig,
-    ReviewSummary, Severity,
+    create_store, discover_files, discover_files_extended, reconstruct_graph, AnalyzerDispatcher,
+    CodeGraph, DiffAnalyzer, Finding, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore,
+    ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary, Severity,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -84,8 +84,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     // ── 4. Impact Analysis ───────────────────────────────────────
     let mut findings: Vec<Finding> = Vec::new();
 
-    let cache = GraphCache::new(&repo_path);
-    let old_graph = load_old_graph(&cache, &repo_path, cli, &config, &dispatcher);
+    let old_graph = load_old_graph(&repo_path, cli, &config, &dispatcher);
 
     if let Some(baseline) = old_graph {
         eprint!("  Running impact analysis... ");
@@ -165,7 +164,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         analyzer_start.elapsed().as_secs_f64()
     );
 
-    // ── 5. Save Cache ────────────────────────────────────────────
+    // ── 5. Save Cache (CozoStore + metadata) ─────────────────────
     let file_paths: Vec<PathBuf> = files
         .iter()
         .map(|f| f.strip_prefix(&repo_path).unwrap_or(f).to_path_buf())
@@ -180,8 +179,25 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         revet_version: revet_core::VERSION.to_string(),
     };
 
-    if let Err(e) = cache.save(&graph, &meta) {
-        eprintln!("  {}: failed to save cache: {}", "warn".yellow(), e);
+    match create_store(&repo_path) {
+        Ok(store) => {
+            let _ = store.delete_snapshot("cached");
+            if let Err(e) = store.flush(&graph, "cached") {
+                eprintln!(
+                    "  {}: failed to save graph to store: {}",
+                    "warn".yellow(),
+                    e
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("  {}: failed to create store: {}", "warn".yellow(), e);
+        }
+    }
+
+    let cache = GraphCache::new(&repo_path);
+    if let Err(e) = cache.save_meta(&meta) {
+        eprintln!("  {}: failed to save metadata: {}", "warn".yellow(), e);
     }
 
     // ── 6. Output ────────────────────────────────────────────────
@@ -194,10 +210,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         Format::Terminal => print_terminal(&findings, &summary, &repo_path, start),
     }
 
-    let fail_on = cli
-        .fail_on
-        .as_deref()
-        .unwrap_or(&config.general.fail_on);
+    let fail_on = cli.fail_on.as_deref().unwrap_or(&config.general.fail_on);
     if summary.exceeds_threshold(fail_on) {
         Ok(ReviewExitCode::FindingsExceedThreshold)
     } else {
@@ -209,17 +222,24 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
 /// Load the old (baseline) graph for impact analysis.
 ///
-/// Fallback chain: cache → git blobs → None
+/// Fallback chain: CozoStore → git blobs → None
 fn load_old_graph(
-    cache: &GraphCache,
     repo_path: &Path,
     cli: &crate::Cli,
     config: &RevetConfig,
     dispatcher: &ParserDispatcher,
 ) -> Option<CodeGraph> {
-    // 1. Try cache (fast path)
-    if let Ok(Some((cached_graph, _meta))) = cache.load() {
-        return Some(cached_graph);
+    // 1. Try CozoStore (fast path)
+    if let Ok(store) = create_store(repo_path) {
+        let snaps = store.snapshots().unwrap_or_default();
+        if snaps.iter().any(|s| s.name == "cached") {
+            match reconstruct_graph(&store, "cached", repo_path) {
+                Ok(graph) => return Some(graph),
+                Err(e) => {
+                    eprintln!("  {}: failed to load from store: {}", "warn".yellow(), e);
+                }
+            }
+        }
     }
 
     // 2. Try building from git blobs at the base ref
