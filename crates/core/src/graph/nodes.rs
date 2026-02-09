@@ -23,6 +23,10 @@ pub struct Node {
 
     /// Additional data specific to the node kind
     data: NodeData,
+
+    /// Decorators/annotations applied to this entity
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    decorators: Vec<String>,
 }
 
 impl Node {
@@ -40,6 +44,7 @@ impl Node {
             line,
             end_line: None,
             data,
+            decorators: Vec::new(),
         }
     }
 
@@ -73,6 +78,16 @@ impl Node {
 
     pub fn data_mut(&mut self) -> &mut NodeData {
         &mut self.data
+    }
+
+    /// Get the decorators/annotations applied to this entity
+    pub fn decorators(&self) -> &[String] {
+        &self.decorators
+    }
+
+    /// Set the decorators/annotations for this entity
+    pub fn set_decorators(&mut self, decorators: Vec<String>) {
+        self.decorators = decorators;
     }
 }
 

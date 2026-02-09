@@ -511,6 +511,41 @@ impl TypeScriptParser {
             .and_then(|t| self.extract_type_text(&t, source))
     }
 
+    /// Extract decorator names from a node's `decorator` children
+    ///
+    /// Tree-sitter represents decorators as child nodes of the decorated declaration.
+    /// Each `decorator` node contains an expression (identifier or call_expression).
+    /// Returns decorator names like `["Component", "Injectable"]`.
+    fn extract_decorators(&self, node: &tree_sitter::Node, source: &str) -> Vec<String> {
+        let mut decorators = Vec::new();
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "decorator" {
+                // The decorator's value is its first named child after '@'
+                if let Some(expr) = child.named_child(0) {
+                    let name = match expr.kind() {
+                        // @MyDecorator
+                        "identifier" => expr.utf8_text(source.as_bytes()).ok().map(String::from),
+                        // @MyDecorator()
+                        "call_expression" => expr
+                            .child_by_field_name("function")
+                            .and_then(|f| f.utf8_text(source.as_bytes()).ok())
+                            .map(String::from),
+                        // @module.decorator or @module.decorator()
+                        "member_expression" => {
+                            expr.utf8_text(source.as_bytes()).ok().map(String::from)
+                        }
+                        _ => expr.utf8_text(source.as_bytes()).ok().map(String::from),
+                    };
+                    if let Some(n) = name {
+                        decorators.push(n);
+                    }
+                }
+            }
+        }
+        decorators
+    }
+
     /// Extract nested functions from a function body
     fn extract_nested_functions(
         &self,
@@ -586,6 +621,7 @@ impl TypeScriptParser {
         let name = name_node.utf8_text(source.as_bytes()).ok()?.to_string();
 
         let base_classes = self.extract_heritage_classes(node, source);
+        let decorators = self.extract_decorators(node, source);
         let (methods, fields) =
             self.extract_class_members(node, source, file_path, graph, &name, function_nodes);
 
@@ -601,6 +637,9 @@ impl TypeScriptParser {
             },
         );
         class_node.set_end_line(node.end_position().row + 1);
+        if !decorators.is_empty() {
+            class_node.set_decorators(decorators);
+        }
 
         Some(graph.add_node(class_node))
     }
@@ -661,9 +700,30 @@ impl TypeScriptParser {
             None => return (methods, fields),
         };
 
+        // Decorators are siblings in class_body, appearing before the member they decorate.
+        // Collect them and attach to the next method/field.
+        let mut pending_decorators: Vec<String> = Vec::new();
+
         let mut cursor = body_node.walk();
         for child in body_node.children(&mut cursor) {
             match child.kind() {
+                "decorator" => {
+                    if let Some(expr) = child.named_child(0) {
+                        let name = match expr.kind() {
+                            "identifier" => {
+                                expr.utf8_text(source.as_bytes()).ok().map(String::from)
+                            }
+                            "call_expression" => expr
+                                .child_by_field_name("function")
+                                .and_then(|f| f.utf8_text(source.as_bytes()).ok())
+                                .map(String::from),
+                            _ => expr.utf8_text(source.as_bytes()).ok().map(String::from),
+                        };
+                        if let Some(n) = name {
+                            pending_decorators.push(n);
+                        }
+                    }
+                }
                 "method_definition" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         if let Ok(method_name) = name_node.utf8_text(source.as_bytes()) {
@@ -682,6 +742,9 @@ impl TypeScriptParser {
                                 },
                             );
                             method_node.set_end_line(child.end_position().row + 1);
+                            if !pending_decorators.is_empty() {
+                                method_node.set_decorators(std::mem::take(&mut pending_decorators));
+                            }
 
                             let method_id = graph.add_node(method_node);
                             methods.push(method_name.clone());
@@ -699,6 +762,7 @@ impl TypeScriptParser {
                             fields.push(field_name.to_string());
                         }
                     }
+                    pending_decorators.clear();
                 }
                 _ => {}
             }

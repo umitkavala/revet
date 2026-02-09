@@ -780,3 +780,72 @@ export enum HttpMethod {
         panic!("Expected Class node data");
     }
 }
+
+#[test]
+fn test_parse_decorators() {
+    let source = r#"
+@Component({
+    selector: 'app-root',
+    template: '<h1>Hello</h1>'
+})
+class AppComponent {
+    @Input()
+    title: string;
+
+    @HostListener('click')
+    onClick() {}
+}
+
+@Injectable()
+class UserService {
+    getUsers() {}
+}
+
+@Entity
+class User {
+    @Column()
+    name: string;
+}
+"#;
+
+    let mut graph = CodeGraph::new(PathBuf::from("/test"));
+    let dispatcher = ParserDispatcher::new();
+    let parser = dispatcher.find_parser(&PathBuf::from("test.ts")).unwrap();
+
+    parser
+        .parse_source(source, &PathBuf::from("test.ts"), &mut graph)
+        .unwrap();
+
+    let classes: Vec<_> = graph
+        .nodes()
+        .filter(|(_, n)| matches!(n.kind(), NodeKind::Class))
+        .collect();
+
+    assert_eq!(classes.len(), 3, "Expected 3 classes");
+
+    // Verify AppComponent has @Component decorator
+    let app_component = classes
+        .iter()
+        .find(|(_, n)| n.name() == "AppComponent")
+        .unwrap();
+    assert_eq!(app_component.1.decorators(), &["Component"]);
+
+    // Verify UserService has @Injectable decorator
+    let user_service = classes
+        .iter()
+        .find(|(_, n)| n.name() == "UserService")
+        .unwrap();
+    assert_eq!(user_service.1.decorators(), &["Injectable"]);
+
+    // Verify User has @Entity decorator (no parens)
+    let user = classes.iter().find(|(_, n)| n.name() == "User").unwrap();
+    assert_eq!(user.1.decorators(), &["Entity"]);
+
+    // Verify method-level decorator: onClick has @HostListener
+    let methods: Vec<_> = graph
+        .nodes()
+        .filter(|(_, n)| matches!(n.kind(), NodeKind::Function) && n.name() == "onClick")
+        .collect();
+    assert_eq!(methods.len(), 1);
+    assert_eq!(methods[0].1.decorators(), &["HostListener"]);
+}
