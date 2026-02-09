@@ -3,6 +3,7 @@
 pub mod go;
 pub mod java;
 pub mod python;
+pub mod rust;
 pub mod typescript;
 
 use crate::graph::{CodeGraph, NodeId};
@@ -69,6 +70,7 @@ impl ParserDispatcher {
                 Box::new(go::GoParser::new()),
                 Box::new(java::JavaParser::new()),
                 Box::new(python::PythonParser::new()),
+                Box::new(rust::RustParser::new()),
                 Box::new(typescript::TypeScriptParser::new()),
             ],
         }
