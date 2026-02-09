@@ -26,11 +26,11 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     let repo_path = path.unwrap_or_else(|| Path::new("."));
     let repo_path = std::fs::canonicalize(repo_path).unwrap_or_else(|_| repo_path.to_path_buf());
 
-    println!(
+    eprintln!(
         "{}",
         format!("  revet v{} — analyzing repository", revet_core::VERSION).bold()
     );
-    println!();
+    eprintln!();
 
     // ── 1. Config ────────────────────────────────────────────────
     let config = RevetConfig::find_and_load(&repo_path)?;
@@ -59,7 +59,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     }
 
     // ── 3. Parse ─────────────────────────────────────────────────
-    print!("  Building code graph... ");
+    eprint!("  Building code graph... ");
     let graph_start = Instant::now();
 
     let mut graph = CodeGraph::new(repo_path.clone());
@@ -73,7 +73,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     }
 
     let node_count: usize = graph.nodes().count();
-    println!(
+    eprintln!(
         "{} — {} files, {} nodes ({:.1}s)",
         "done".green(),
         files.len(),
@@ -88,7 +88,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     let old_graph = load_old_graph(&cache, &repo_path, cli, &config, &dispatcher);
 
     if let Some(baseline) = old_graph {
-        print!("  Running impact analysis... ");
+        eprint!("  Running impact analysis... ");
         let impact_start = Instant::now();
 
         let analysis = ImpactAnalysis::new(baseline, graph.clone());
@@ -128,13 +128,13 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
             });
         }
 
-        println!(
+        eprintln!(
             "{} ({:.1}s)",
             "done".green(),
             impact_start.elapsed().as_secs_f64()
         );
     } else {
-        println!(
+        eprintln!(
             "  {} — run again to compare changes",
             "No baseline graph available, skipping impact analysis".dimmed()
         );
@@ -153,12 +153,12 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     }
 
     // ── 4b. Domain Analyzers ─────────────────────────────────────
-    print!("  Running domain analyzers... ");
+    eprint!("  Running domain analyzers... ");
     let analyzer_start = Instant::now();
     let analyzer_findings = analyzer_dispatcher.run_all(&files, &repo_path, &config);
     let analyzer_count = analyzer_findings.len();
     findings.extend(analyzer_findings);
-    println!(
+    eprintln!(
         "{} — {} finding(s) ({:.1}s)",
         "done".green(),
         analyzer_count,
@@ -222,15 +222,15 @@ fn load_old_graph(
     let base = cli.diff.as_deref().unwrap_or(&config.general.diff_base);
     match GitTreeReader::new(repo_path) {
         Ok(reader) => {
-            print!("  Building baseline graph from git ({})... ", base);
+            eprint!("  Building baseline graph from git ({})... ", base);
             match reader.build_graph_at_ref(base, repo_path, dispatcher) {
                 Ok(blob_graph) => {
                     let node_count: usize = blob_graph.nodes().count();
-                    println!("{} ({} nodes)", "done".green(), node_count);
+                    eprintln!("{} ({} nodes)", "done".green(), node_count);
                     Some(blob_graph)
                 }
                 Err(e) => {
-                    println!("{}", format!("failed: {}", e).dimmed());
+                    eprintln!("{}", format!("failed: {}", e).dimmed());
                     None
                 }
             }
@@ -280,7 +280,7 @@ fn discover_review_files(
 
     match DiffAnalyzer::new(repo_path) {
         Ok(analyzer) => {
-            print!("  Discovering changed files (diff vs {})... ", base);
+            eprint!("  Discovering changed files (diff vs {})... ", base);
             match analyzer.get_diff(base, None) {
                 Ok(diff) => {
                     let changed = analyzer.get_changed_files(&diff)?;
@@ -298,10 +298,10 @@ fn discover_review_files(
                             }
                         })
                         .collect();
-                    println!("{} ({} files)", "done".green(), files.len());
+                    eprintln!("{} ({} files)", "done".green(), files.len());
 
                     if files.is_empty() {
-                        println!(
+                        eprintln!(
                             "  {} — falling back to full scan",
                             "No supported changed files".dimmed()
                         );
@@ -311,7 +311,7 @@ fn discover_review_files(
                     Ok(files)
                 }
                 Err(_) => {
-                    println!(
+                    eprintln!(
                         "{}",
                         format!(
                             "  Could not diff against '{}', falling back to full scan",
@@ -324,7 +324,7 @@ fn discover_review_files(
             }
         }
         Err(_) => {
-            println!("  {} — running full scan", "Not a git repository".dimmed());
+            eprintln!("  {} — running full scan", "Not a git repository".dimmed());
             full_scan(repo_path, all_extensions, extra_filenames, config)
         }
     }
@@ -336,13 +336,13 @@ fn full_scan(
     filenames: &[&str],
     config: &RevetConfig,
 ) -> Result<Vec<PathBuf>> {
-    print!("  Discovering files (full scan)... ");
+    eprint!("  Discovering files (full scan)... ");
     let files = if filenames.is_empty() {
         discover_files(repo_path, extensions, &config.ignore.paths)?
     } else {
         discover_files_extended(repo_path, extensions, filenames, &config.ignore.paths)?
     };
-    println!("{} ({} files)", "done".green(), files.len());
+    eprintln!("{} ({} files)", "done".green(), files.len());
     Ok(files)
 }
 
