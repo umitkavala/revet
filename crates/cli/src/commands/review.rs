@@ -12,7 +12,16 @@ use std::time::{Instant, SystemTime};
 
 use crate::output;
 
-pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<()> {
+/// Exit status from the review command
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReviewExitCode {
+    /// No findings exceeding the configured threshold
+    Success,
+    /// Findings exceeded the configured threshold
+    FindingsExceedThreshold,
+}
+
+pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     let start = Instant::now();
     let repo_path = path.unwrap_or_else(|| Path::new("."));
     let repo_path = std::fs::canonicalize(repo_path).unwrap_or_else(|_| repo_path.to_path_buf());
@@ -46,7 +55,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<()> {
 
     if files.is_empty() {
         print_no_files(format, start);
-        return Ok(());
+        return Ok(ReviewExitCode::Success);
     }
 
     // ── 3. Parse ─────────────────────────────────────────────────
@@ -181,10 +190,15 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<()> {
     match format {
         Format::Json => print_json(&findings, &summary),
         Format::Sarif => print_sarif(&findings, &repo_path),
+        Format::Github => print_github(&findings, &repo_path),
         Format::Terminal => print_terminal(&findings, &summary, &repo_path, start),
     }
 
-    Ok(())
+    if summary.exceeds_threshold(&config.general.fail_on) {
+        Ok(ReviewExitCode::FindingsExceedThreshold)
+    } else {
+        Ok(ReviewExitCode::Success)
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -230,6 +244,7 @@ enum Format {
     Terminal,
     Json,
     Sarif,
+    Github,
 }
 
 fn resolve_format(cli: &crate::Cli, config: &RevetConfig) -> Format {
@@ -237,12 +252,14 @@ fn resolve_format(cli: &crate::Cli, config: &RevetConfig) -> Format {
         return match f {
             crate::OutputFormat::Json => Format::Json,
             crate::OutputFormat::Sarif => Format::Sarif,
-            _ => Format::Terminal,
+            crate::OutputFormat::Github => Format::Github,
+            crate::OutputFormat::Terminal => Format::Terminal,
         };
     }
     match config.output.format.as_str() {
         "json" => Format::Json,
         "sarif" => Format::Sarif,
+        "github" => Format::Github,
         _ => Format::Terminal,
     }
 }
@@ -460,9 +477,18 @@ fn print_no_files(format: Format, start: Instant) {
                 println!("{}", json);
             }
         }
+        Format::Github => {
+            // No files, no annotations — nothing to output
+        }
         Format::Terminal => {
             println!("  {}", "No supported files found.".dimmed());
             println!("  Time: {:.1}s", start.elapsed().as_secs_f64());
         }
+    }
+}
+
+fn print_github(findings: &[Finding], repo_path: &Path) {
+    for f in findings {
+        println!("{}", output::github::format_finding(f, repo_path));
     }
 }

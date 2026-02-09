@@ -90,11 +90,16 @@ fn main() -> Result<()> {
             commands::explain::run(&finding_id, ai)?;
         }
         Some(Commands::Review { ref path }) => {
-            commands::review::run(path.as_deref(), &cli)?;
+            let exit_code = commands::review::run(path.as_deref(), &cli)?;
+            if exit_code == commands::review::ReviewExitCode::FindingsExceedThreshold {
+                std::process::exit(1);
+            }
         }
         None => {
-            // Default command is review with current directory
-            commands::review::run(None, &cli)?;
+            let exit_code = commands::review::run(None, &cli)?;
+            if exit_code == commands::review::ReviewExitCode::FindingsExceedThreshold {
+                std::process::exit(1);
+            }
         }
     }
 

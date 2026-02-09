@@ -52,3 +52,21 @@ pub struct ReviewSummary {
     pub files_analyzed: usize,
     pub nodes_parsed: usize,
 }
+
+impl ReviewSummary {
+    /// Check whether findings exceed the configured severity threshold.
+    ///
+    /// - `"error"` → fail if errors > 0
+    /// - `"warning"` → fail if errors or warnings > 0
+    /// - `"info"` → fail if any findings
+    /// - `"never"` → always pass
+    pub fn exceeds_threshold(&self, fail_on: &str) -> bool {
+        match fail_on {
+            "error" => self.errors > 0,
+            "warning" => self.errors > 0 || self.warnings > 0,
+            "info" => self.errors > 0 || self.warnings > 0 || self.info > 0,
+            "never" => false,
+            _ => self.errors > 0, // default to "error" for unknown values
+        }
+    }
+}
