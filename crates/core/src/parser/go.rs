@@ -209,18 +209,10 @@ impl GoParser {
                     if let Some((enum_id, const_ids)) =
                         self.extract_iota_enum(&child, source, file_path, graph)
                     {
-                        graph.add_edge(
-                            file_node_id,
-                            enum_id,
-                            Edge::new(EdgeKind::Contains),
-                        );
+                        graph.add_edge(file_node_id, enum_id, Edge::new(EdgeKind::Contains));
                         node_ids.push(enum_id);
                         for cid in const_ids {
-                            graph.add_edge(
-                                file_node_id,
-                                cid,
-                                Edge::new(EdgeKind::Contains),
-                            );
+                            graph.add_edge(file_node_id, cid, Edge::new(EdgeKind::Contains));
                             node_ids.push(cid);
                         }
                     } else {
@@ -228,7 +220,11 @@ impl GoParser {
                         for const_child in child.children(&mut const_cursor) {
                             if const_child.kind() == "const_spec" {
                                 for node_id in self.extract_variable(
-                                    &const_child, source, file_path, graph, true,
+                                    &const_child,
+                                    source,
+                                    file_path,
+                                    graph,
+                                    true,
                                 ) {
                                     graph.add_edge(
                                         file_node_id,

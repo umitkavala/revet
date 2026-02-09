@@ -691,12 +691,12 @@ const (
     }
 
     // Verify Weekday members
-    let weekday = classes
-        .iter()
-        .find(|(_, n)| n.name() == "Weekday")
-        .unwrap();
+    let weekday = classes.iter().find(|(_, n)| n.name() == "Weekday").unwrap();
     if let NodeData::Class { fields, .. } = weekday.1.data() {
-        assert_eq!(fields, &["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]);
+        assert_eq!(
+            fields,
+            &["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        );
     } else {
         panic!("Expected Class node data for Weekday");
     }
@@ -758,13 +758,22 @@ func main() {
         .collect();
 
     // Should have 3 functions: 2 init + 1 main
-    let init_funcs: Vec<_> = functions.iter().filter(|(_, n)| n.name() == "init").collect();
+    let init_funcs: Vec<_> = functions
+        .iter()
+        .filter(|(_, n)| n.name() == "init")
+        .collect();
     assert_eq!(init_funcs.len(), 2, "Expected 2 init functions");
 
-    let main_funcs: Vec<_> = functions.iter().filter(|(_, n)| n.name() == "main").collect();
+    let main_funcs: Vec<_> = functions
+        .iter()
+        .filter(|(_, n)| n.name() == "main")
+        .collect();
     assert_eq!(main_funcs.len(), 1, "Expected 1 main function");
 
     // Init functions should be on different lines
     let lines: Vec<usize> = init_funcs.iter().map(|(_, n)| n.line()).collect();
-    assert_ne!(lines[0], lines[1], "init functions should be on different lines");
+    assert_ne!(
+        lines[0], lines[1],
+        "init functions should be on different lines"
+    );
 }
