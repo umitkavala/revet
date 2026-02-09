@@ -194,7 +194,11 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         Format::Terminal => print_terminal(&findings, &summary, &repo_path, start),
     }
 
-    if summary.exceeds_threshold(&config.general.fail_on) {
+    let fail_on = cli
+        .fail_on
+        .as_deref()
+        .unwrap_or(&config.general.fail_on);
+    if summary.exceeds_threshold(fail_on) {
         Ok(ReviewExitCode::FindingsExceedThreshold)
     } else {
         Ok(ReviewExitCode::Success)

@@ -37,6 +37,10 @@ pub(crate) struct Cli {
     #[arg(long, value_enum, global = true)]
     format: Option<OutputFormat>,
 
+    /// Severity threshold for non-zero exit: error, warning, info, never
+    #[arg(long, global = true)]
+    fail_on: Option<String>,
+
     /// Apply automatic fixes
     #[arg(long, global = true)]
     fix: bool,

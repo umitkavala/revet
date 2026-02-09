@@ -107,9 +107,7 @@ runs:
 
         # Fail-on (override config)
         if [ -n "${{ inputs.fail-on }}" ]; then
-          FLAGS="$FLAGS"
-          # fail-on is handled via .revet.toml or env; we pass it separately
-          echo "REVET_FAIL_ON=${{ inputs.fail-on }}" >> "$GITHUB_ENV"
+          FLAGS="$FLAGS --fail-on ${{ inputs.fail-on }}"
         fi
 
         # Modules
