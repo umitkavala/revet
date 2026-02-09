@@ -638,3 +638,133 @@ func main() {
     println!("Node counts: {:?}", node_counts);
     println!("Edge counts: {:?}", edge_counts);
 }
+
+#[test]
+fn test_parse_iota_enums() {
+    let source = r#"
+package main
+
+type Color int
+
+const (
+    Red Color = iota
+    Green
+    Blue
+)
+
+type Weekday int
+
+const (
+    Monday Weekday = iota
+    Tuesday
+    Wednesday
+    Thursday
+    Friday
+)
+
+// Non-iota const block should NOT create an enum
+const (
+    Pi    = 3.14
+    Label = "hello"
+)
+"#;
+
+    let graph = parse_go(source);
+
+    // Should have 2 enum Class nodes (Color, Weekday) plus 1 existing type alias for each
+    let classes: Vec<_> = graph
+        .nodes()
+        .filter(|(_, n)| matches!(n.kind(), NodeKind::Class))
+        .collect();
+
+    let class_names: Vec<&str> = classes.iter().map(|(_, n)| n.name()).collect();
+    assert!(class_names.contains(&"Color"), "Expected Color enum");
+    assert!(class_names.contains(&"Weekday"), "Expected Weekday enum");
+    assert_eq!(classes.len(), 2, "Expected 2 iota enum classes");
+
+    // Verify Color members
+    let color = classes.iter().find(|(_, n)| n.name() == "Color").unwrap();
+    if let NodeData::Class { fields, .. } = color.1.data() {
+        assert_eq!(fields, &["Red", "Green", "Blue"]);
+    } else {
+        panic!("Expected Class node data for Color");
+    }
+
+    // Verify Weekday members
+    let weekday = classes
+        .iter()
+        .find(|(_, n)| n.name() == "Weekday")
+        .unwrap();
+    if let NodeData::Class { fields, .. } = weekday.1.data() {
+        assert_eq!(fields, &["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]);
+    } else {
+        panic!("Expected Class node data for Weekday");
+    }
+
+    // Iota const values should also exist as individual Variable nodes
+    let variables: Vec<_> = graph
+        .nodes()
+        .filter(|(_, n)| matches!(n.kind(), NodeKind::Variable))
+        .collect();
+    let var_names: Vec<&str> = variables.iter().map(|(_, n)| n.name()).collect();
+    assert!(var_names.contains(&"Red"));
+    assert!(var_names.contains(&"Green"));
+    assert!(var_names.contains(&"Blue"));
+    assert!(var_names.contains(&"Monday"));
+
+    // Verify iota const has the enum type
+    let red = variables.iter().find(|(_, n)| n.name() == "Red").unwrap();
+    if let NodeData::Variable {
+        var_type,
+        is_constant,
+    } = red.1.data()
+    {
+        assert!(is_constant);
+        assert_eq!(var_type.as_deref(), Some("Color"));
+    } else {
+        panic!("Expected Variable node data for Red");
+    }
+
+    // Non-iota consts should still be plain variables (Pi, Label)
+    assert!(var_names.contains(&"Pi"));
+    assert!(var_names.contains(&"Label"));
+}
+
+#[test]
+fn test_parse_init_functions() {
+    let source = r#"
+package main
+
+import "fmt"
+
+func init() {
+    fmt.Println("first init")
+}
+
+func init() {
+    fmt.Println("second init")
+}
+
+func main() {
+    fmt.Println("main")
+}
+"#;
+
+    let graph = parse_go(source);
+
+    let functions: Vec<_> = graph
+        .nodes()
+        .filter(|(_, n)| matches!(n.kind(), NodeKind::Function))
+        .collect();
+
+    // Should have 3 functions: 2 init + 1 main
+    let init_funcs: Vec<_> = functions.iter().filter(|(_, n)| n.name() == "init").collect();
+    assert_eq!(init_funcs.len(), 2, "Expected 2 init functions");
+
+    let main_funcs: Vec<_> = functions.iter().filter(|(_, n)| n.name() == "main").collect();
+    assert_eq!(main_funcs.len(), 1, "Expected 1 main function");
+
+    // Init functions should be on different lines
+    let lines: Vec<usize> = init_funcs.iter().map(|(_, n)| n.line()).collect();
+    assert_ne!(lines[0], lines[1], "init functions should be on different lines");
+}

@@ -205,18 +205,38 @@ impl GoParser {
                     }
                 }
                 "const_declaration" => {
-                    let mut const_cursor = child.walk();
-                    for const_child in child.children(&mut const_cursor) {
-                        if const_child.kind() == "const_spec" {
-                            for node_id in
-                                self.extract_variable(&const_child, source, file_path, graph, true)
-                            {
-                                graph.add_edge(
-                                    file_node_id,
-                                    node_id,
-                                    Edge::new(EdgeKind::Contains),
-                                );
-                                node_ids.push(node_id);
+                    // Check for iota enum pattern first
+                    if let Some((enum_id, const_ids)) =
+                        self.extract_iota_enum(&child, source, file_path, graph)
+                    {
+                        graph.add_edge(
+                            file_node_id,
+                            enum_id,
+                            Edge::new(EdgeKind::Contains),
+                        );
+                        node_ids.push(enum_id);
+                        for cid in const_ids {
+                            graph.add_edge(
+                                file_node_id,
+                                cid,
+                                Edge::new(EdgeKind::Contains),
+                            );
+                            node_ids.push(cid);
+                        }
+                    } else {
+                        let mut const_cursor = child.walk();
+                        for const_child in child.children(&mut const_cursor) {
+                            if const_child.kind() == "const_spec" {
+                                for node_id in self.extract_variable(
+                                    &const_child, source, file_path, graph, true,
+                                ) {
+                                    graph.add_edge(
+                                        file_node_id,
+                                        node_id,
+                                        Edge::new(EdgeKind::Contains),
+                                    );
+                                    node_ids.push(node_id);
+                                }
                             }
                         }
                     }
@@ -681,6 +701,112 @@ impl GoParser {
         }
 
         node_ids
+    }
+
+    /// Try to extract an iota-based enum from a const declaration
+    ///
+    /// Detects the Go enum pattern:
+    /// ```go
+    /// type Color int
+    /// const (
+    ///     Red Color = iota
+    ///     Green
+    ///     Blue
+    /// )
+    /// ```
+    /// Returns Some((NodeId, Vec<NodeId>)) with the enum class node and individual const nodes,
+    /// or None if this is not an iota pattern.
+    fn extract_iota_enum(
+        &self,
+        node: &tree_sitter::Node,
+        source: &str,
+        file_path: &Path,
+        graph: &mut CodeGraph,
+    ) -> Option<(NodeId, Vec<NodeId>)> {
+        // Collect all const_spec children
+        let mut specs = Vec::new();
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "const_spec" {
+                specs.push(child);
+            }
+        }
+
+        if specs.is_empty() {
+            return None;
+        }
+
+        // Check if the first spec uses iota
+        let first_spec = &specs[0];
+        let has_iota = {
+            let mut found = false;
+            let mut sc = first_spec.walk();
+            for child in first_spec.children(&mut sc) {
+                if child.kind() == "expression_list" {
+                    let mut ec = child.walk();
+                    for expr in child.children(&mut ec) {
+                        if expr.kind() == "iota" {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            found
+        };
+
+        if !has_iota {
+            return None;
+        }
+
+        // Extract the type name from the first spec (e.g., "Color" in "Red Color = iota")
+        let enum_name = first_spec
+            .child_by_field_name("type")
+            .and_then(|t| t.utf8_text(source.as_bytes()).ok())
+            .map(String::from)
+            .unwrap_or_else(|| "IotaEnum".to_string());
+
+        // Collect all member names and create individual const Variable nodes
+        let mut fields = Vec::new();
+        let mut const_node_ids = Vec::new();
+        for spec in &specs {
+            let mut sc = spec.walk();
+            for child in spec.children(&mut sc) {
+                if child.kind() == "identifier" {
+                    if let Ok(name) = child.utf8_text(source.as_bytes()) {
+                        fields.push(name.to_string());
+                        let var_node = Node::new(
+                            NodeKind::Variable,
+                            name.to_string(),
+                            file_path.to_path_buf(),
+                            spec.start_position().row + 1,
+                            NodeData::Variable {
+                                var_type: Some(enum_name.clone()),
+                                is_constant: true,
+                            },
+                        );
+                        const_node_ids.push(graph.add_node(var_node));
+                    }
+                }
+            }
+        }
+
+        // Create the enum Class node
+        let mut enum_node = Node::new(
+            NodeKind::Class,
+            enum_name,
+            file_path.to_path_buf(),
+            node.start_position().row + 1,
+            NodeData::Class {
+                base_classes: vec![],
+                methods: vec![],
+                fields,
+            },
+        );
+        enum_node.set_end_line(node.end_position().row + 1);
+
+        let enum_id = graph.add_node(enum_node);
+        Some((enum_id, const_node_ids))
     }
 
     fn extract_calls(
