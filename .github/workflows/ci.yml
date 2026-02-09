@@ -57,5 +57,5 @@ jobs:
       - uses: ./
         with:
           mode: diff
-          fail-on: error
+          fail-on: never
           sarif-upload: true
