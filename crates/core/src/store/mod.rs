@@ -15,9 +15,12 @@ pub use memory::MemoryStore;
 #[cfg(feature = "cozo-store")]
 pub use cozo::CozoStore;
 
+use std::collections::HashMap;
+use std::path::Path;
+
 use crate::graph::{Edge, EdgeKind, Node, NodeId, NodeKind};
 use crate::CodeGraph;
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 /// Storage-agnostic node identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -143,4 +146,50 @@ pub trait GraphStore: Send + Sync {
         old_snapshot: &str,
         new_snapshot: &str,
     ) -> Result<Vec<(StoreNodeId, Option<StoreNodeId>)>>;
+}
+
+/// Reconstruct a `CodeGraph` from a store snapshot.
+///
+/// Loads all nodes (sorted by StoreNodeId for deterministic NodeId assignment),
+/// maps them into a new CodeGraph, then adds all edges.
+pub fn reconstruct_graph(
+    store: &dyn GraphStore,
+    snapshot: &str,
+    root_path: &Path,
+) -> Result<CodeGraph> {
+    let mut graph = CodeGraph::new(root_path.to_path_buf());
+
+    // Load nodes sorted by store ID for deterministic petgraph NodeId assignment
+    let mut nodes = store.nodes(snapshot)?;
+    nodes.sort_by_key(|(id, _)| id.0);
+
+    // Map StoreNodeId → petgraph NodeId
+    let mut id_map: HashMap<StoreNodeId, NodeId> = HashMap::new();
+    for (store_id, node) in &nodes {
+        let graph_id = graph.add_node(node.clone());
+        id_map.insert(*store_id, graph_id);
+    }
+
+    // Add edges
+    for (store_id, _) in &nodes {
+        let edges = store.edges_from(*store_id, snapshot)?;
+        for edge_result in edges {
+            if let (Some(&from), Some(&to)) =
+                (id_map.get(&edge_result.from), id_map.get(&edge_result.to))
+            {
+                graph.add_edge(from, to, edge_result.edge);
+            }
+        }
+    }
+
+    Ok(graph)
+}
+
+/// Create a SQLite-backed CozoStore at `.revet-cache/graph.db` under the given repo root.
+#[cfg(feature = "cozo-store")]
+pub fn create_store(repo_root: &Path) -> Result<CozoStore> {
+    let cache_dir = repo_root.join(".revet-cache");
+    std::fs::create_dir_all(&cache_dir).context("Failed to create .revet-cache directory")?;
+    let db_path = cache_dir.join("graph.db");
+    CozoStore::new_sqlite(&db_path)
 }

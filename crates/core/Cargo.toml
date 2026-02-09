@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Core code intelligence graph engine for Revet"
 
 [features]
-default = []
+default = ["cozo-store"]
 cozo-store = ["cozo-ce"]
 
 [dependencies]

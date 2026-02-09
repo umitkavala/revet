@@ -26,6 +26,10 @@ pub use discovery::{discover_files, discover_files_extended};
 pub use finding::{Finding, ReviewSummary, Severity};
 pub use graph::{CodeGraph, Edge, Node, NodeData, NodeId, NodeKind};
 pub use parser::{LanguageParser, ParseError, ParserDispatcher};
+pub use store::{reconstruct_graph, GraphStore, MemoryStore, StoreNodeId};
+
+#[cfg(feature = "cozo-store")]
+pub use store::{create_store, CozoStore};
 
 /// Revet version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

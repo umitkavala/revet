@@ -80,6 +80,15 @@ impl GraphCache {
         Ok(())
     }
 
+    /// Save only the metadata JSON (when graph is persisted via CozoStore)
+    pub fn save_meta(&self, meta: &GraphCacheMeta) -> Result<()> {
+        self.ensure_cache_dir()?;
+        let meta_path = self.cache_dir.join("graph.meta.json");
+        let meta_contents = serde_json::to_string_pretty(meta)?;
+        std::fs::write(&meta_path, meta_contents)?;
+        Ok(())
+    }
+
     /// Clear the cache
     pub fn clear(&self) -> Result<()> {
         if self.cache_dir.exists() {

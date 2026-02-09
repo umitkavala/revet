@@ -12,7 +12,7 @@ name = "revet"
 path = "src/main.rs"
 
 [dependencies]
-revet-core = { path = "../core" }
+revet-core = { path = "../core", features = ["cozo-store"] }
 clap.workspace = true
 colored.workspace = true
 anyhow.workspace = true

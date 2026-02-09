@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use revet_core::graph::{Edge, EdgeKind, EdgeMetadata, Node, NodeData, NodeKind, Parameter};
-use revet_core::store::{GraphStore, MemoryStore, StoreNodeId};
+use revet_core::store::{reconstruct_graph, GraphStore, MemoryStore, StoreNodeId};
 use revet_core::CodeGraph;
 
 #[cfg(feature = "cozo-store")]
@@ -529,5 +529,89 @@ fn test_multiple_edges_same_pair() {
         let kinds: Vec<_> = edges.iter().map(|e| *e.edge.kind()).collect();
         assert!(kinds.contains(&EdgeKind::Calls), "[{name}]");
         assert!(kinds.contains(&EdgeKind::References), "[{name}]");
+    }
+}
+
+#[test]
+fn test_reconstruct_graph_round_trip() {
+    let graph = build_sample_graph();
+
+    for (name, store) in create_stores() {
+        store.flush(&graph, "v1").unwrap();
+
+        let reconstructed = reconstruct_graph(&*store, "v1", &PathBuf::from("/repo")).unwrap();
+
+        // Same node count
+        let orig_count: usize = graph.nodes().count();
+        let recon_count: usize = reconstructed.nodes().count();
+        assert_eq!(recon_count, orig_count, "[{name}] node count mismatch");
+
+        // Verify node names and kinds match
+        let mut orig_names: Vec<_> = graph.nodes().map(|(_, n)| n.name().to_string()).collect();
+        let mut recon_names: Vec<_> = reconstructed
+            .nodes()
+            .map(|(_, n)| n.name().to_string())
+            .collect();
+        orig_names.sort();
+        recon_names.sort();
+        assert_eq!(recon_names, orig_names, "[{name}] node names mismatch");
+
+        // Verify edges: func_a -> func_b, func_b -> MyClass
+        let edges_from_a: Vec<_> = reconstructed
+            .edges_from(petgraph::graph::NodeIndex::new(0))
+            .collect();
+        assert_eq!(
+            edges_from_a.len(),
+            1,
+            "[{name}] func_a should have 1 outgoing edge"
+        );
+    }
+}
+
+#[test]
+fn test_reconstruct_graph_preserves_decorators() {
+    let mut graph = CodeGraph::new(PathBuf::from("/repo"));
+
+    let mut node = Node::new(
+        NodeKind::Function,
+        "decorated_func".to_string(),
+        PathBuf::from("app.py"),
+        5,
+        NodeData::Function {
+            parameters: vec![],
+            return_type: None,
+        },
+    );
+    node.set_decorators(vec![
+        "@app.route".to_string(),
+        "@login_required".to_string(),
+    ]);
+    graph.add_node(node);
+
+    for (name, store) in create_stores() {
+        store.flush(&graph, "v1").unwrap();
+
+        let reconstructed = reconstruct_graph(&*store, "v1", &PathBuf::from("/repo")).unwrap();
+
+        let (_, recon_node) = reconstructed.nodes().next().unwrap();
+        assert_eq!(
+            recon_node.decorators(),
+            &["@app.route", "@login_required"],
+            "[{name}] decorators should round-trip"
+        );
+    }
+}
+
+#[test]
+fn test_reconstruct_empty_graph() {
+    let graph = CodeGraph::new(PathBuf::from("/repo"));
+
+    for (name, store) in create_stores() {
+        store.flush(&graph, "empty").unwrap();
+
+        let reconstructed = reconstruct_graph(&*store, "empty", &PathBuf::from("/repo")).unwrap();
+
+        let count: usize = reconstructed.nodes().count();
+        assert_eq!(count, 0, "[{name}] empty graph should have 0 nodes");
     }
 }
