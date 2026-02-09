@@ -1,0 +1,171 @@
+name: 'Revet Code Review'
+description: 'Run revet code review with inline PR annotations and SARIF upload'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  version:
+    description: '"source" to build from HEAD, or a release tag (e.g. "v0.1.0", "latest") to download a pre-built binary'
+    required: false
+    default: 'source'
+  mode:
+    description: '"diff" (PR changes only) or "full" (entire repo)'
+    required: false
+    default: 'diff'
+  diff-base:
+    description: 'Git ref to diff against. Auto-detects PR base SHA on pull_request events.'
+    required: false
+    default: ''
+  fail-on:
+    description: 'Severity threshold for failing the step: "error", "warning", "info", or "never"'
+    required: false
+    default: ''
+  modules:
+    description: 'Comma-separated list of modules to enable (e.g. "security,ml,infra")'
+    required: false
+    default: ''
+  sarif-upload:
+    description: 'Upload SARIF results to GitHub Code Scanning'
+    required: false
+    default: 'true'
+  format:
+    description: 'Annotation format: "github", "json", or "none"'
+    required: false
+    default: 'github'
+  working-directory:
+    description: 'Path to the repository root'
+    required: false
+    default: '.'
+
+runs:
+  using: 'composite'
+  steps:
+    # ── 1. Install Rust (source build only) ───────────────────────
+    - name: Install Rust toolchain
+      if: inputs.version == 'source'
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy
+
+    # ── 2. Cache cargo (source build only) ────────────────────────
+    - name: Cache cargo registry and target
+      if: inputs.version == 'source'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: revet-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          revet-${{ runner.os }}-cargo-
+
+    # ── 3. Build or download revet ────────────────────────────────
+    - name: Build revet from source
+      if: inputs.version == 'source'
+      shell: bash
+      run: cargo build --release --bin revet
+      working-directory: ${{ inputs.working-directory }}
+
+    - name: Set revet binary path (source)
+      if: inputs.version == 'source'
+      shell: bash
+      run: echo "REVET_BIN=${{ github.workspace }}/target/release/revet" >> "$GITHUB_ENV"
+
+    - name: Download revet release
+      if: inputs.version != 'source'
+      shell: bash
+      run: |
+        echo "::error::Pre-built binary downloads are not yet supported. Use version: 'source' to build from HEAD."
+        exit 1
+
+    # ── 4. Determine diff base ────────────────────────────────────
+    - name: Determine diff base
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.diff-base }}" ]; then
+          echo "REVET_DIFF_BASE=${{ inputs.diff-base }}" >> "$GITHUB_ENV"
+        elif [ "${{ github.event_name }}" = "pull_request" ]; then
+          echo "REVET_DIFF_BASE=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
+        else
+          echo "REVET_DIFF_BASE=main" >> "$GITHUB_ENV"
+        fi
+
+    # ── 5. Build revet flags ──────────────────────────────────────
+    - name: Build revet command flags
+      shell: bash
+      run: |
+        FLAGS=""
+
+        # Mode
+        if [ "${{ inputs.mode }}" = "full" ]; then
+          FLAGS="$FLAGS --full"
+        else
+          FLAGS="$FLAGS --diff $REVET_DIFF_BASE"
+        fi
+
+        # Fail-on (override config)
+        if [ -n "${{ inputs.fail-on }}" ]; then
+          FLAGS="$FLAGS"
+          # fail-on is handled via .revet.toml or env; we pass it separately
+          echo "REVET_FAIL_ON=${{ inputs.fail-on }}" >> "$GITHUB_ENV"
+        fi
+
+        # Modules
+        if [ -n "${{ inputs.modules }}" ]; then
+          FLAGS="$FLAGS --module ${{ inputs.modules }}"
+        fi
+
+        echo "REVET_FLAGS=$FLAGS" >> "$GITHUB_ENV"
+
+    # ── 6. Run revet (annotations) ───────────────────────────────
+    - name: Run revet review (annotations)
+      if: inputs.format != 'none'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set +e
+        $REVET_BIN review $REVET_FLAGS --format ${{ inputs.format }}
+        REVET_EXIT=$?
+        echo "REVET_EXIT=$REVET_EXIT" >> "$GITHUB_ENV"
+        # Don't fail yet — we still need to run SARIF
+        exit 0
+
+    - name: Run revet review (skip annotations)
+      if: inputs.format == 'none'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set +e
+        $REVET_BIN review $REVET_FLAGS --format json > /dev/null
+        REVET_EXIT=$?
+        echo "REVET_EXIT=$REVET_EXIT" >> "$GITHUB_ENV"
+        exit 0
+
+    # ── 7. Run revet (SARIF) ──────────────────────────────────────
+    - name: Generate SARIF report
+      if: inputs.sarif-upload == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        SARIF_FILE="${{ runner.temp }}/revet-results.sarif"
+        $REVET_BIN review $REVET_FLAGS --format sarif > "$SARIF_FILE"
+        echo "REVET_SARIF=$SARIF_FILE" >> "$GITHUB_ENV"
+
+    # ── 8. Upload SARIF ───────────────────────────────────────────
+    - name: Upload SARIF to GitHub Code Scanning
+      if: inputs.sarif-upload == 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ env.REVET_SARIF }}
+        category: revet
+
+    # ── 9. Fail if threshold exceeded ─────────────────────────────
+    - name: Check exit code
+      shell: bash
+      run: |
+        if [ "${REVET_EXIT:-0}" != "0" ]; then
+          echo "::error::revet found findings exceeding the configured threshold"
+          exit 1
+        fi
