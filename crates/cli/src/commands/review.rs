@@ -170,7 +170,8 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<()> {
 
     match format {
         Format::Json => print_json(&findings, &summary),
-        _ => print_terminal(&findings, &summary, &repo_path, start),
+        Format::Sarif => print_sarif(&findings, &repo_path),
+        Format::Terminal => print_terminal(&findings, &summary, &repo_path, start),
     }
 
     Ok(())
@@ -218,17 +219,20 @@ fn load_old_graph(
 enum Format {
     Terminal,
     Json,
+    Sarif,
 }
 
 fn resolve_format(cli: &crate::Cli, config: &RevetConfig) -> Format {
     if let Some(ref f) = cli.format {
         return match f {
             crate::OutputFormat::Json => Format::Json,
+            crate::OutputFormat::Sarif => Format::Sarif,
             _ => Format::Terminal,
         };
     }
     match config.output.format.as_str() {
         "json" => Format::Json,
+        "sarif" => Format::Sarif,
         _ => Format::Terminal,
     }
 }
@@ -397,6 +401,14 @@ fn print_json(findings: &[Finding], summary: &ReviewSummary) {
     }
 }
 
+fn print_sarif(findings: &[Finding], repo_path: &Path) {
+    let log = output::sarif::build_sarif_log(findings, repo_path);
+    match serde_json::to_string_pretty(&log) {
+        Ok(json) => println!("{}", json),
+        Err(e) => eprintln!("Failed to serialize SARIF: {}", e),
+    }
+}
+
 fn print_no_files(format: Format, start: Instant) {
     match format {
         Format::Json => {
@@ -412,7 +424,13 @@ fn print_no_files(format: Format, start: Instant) {
                 println!("{}", json);
             }
         }
-        _ => {
+        Format::Sarif => {
+            let log = output::sarif::build_sarif_log(&[], Path::new("."));
+            if let Ok(json) = serde_json::to_string_pretty(&log) {
+                println!("{}", json);
+            }
+        }
+        Format::Terminal => {
             println!("  {}", "No supported files found.".dimmed());
             println!("  Time: {:.1}s", start.elapsed().as_secs_f64());
         }
