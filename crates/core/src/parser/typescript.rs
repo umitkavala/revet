@@ -148,6 +148,12 @@ impl TypeScriptParser {
                     node_ids.push(node_id);
                 }
             }
+            "enum_declaration" => {
+                if let Some(node_id) = self.extract_enum(child, source, file_path, graph) {
+                    graph.add_edge(file_node_id, node_id, Edge::new(EdgeKind::Contains));
+                    node_ids.push(node_id);
+                }
+            }
             "import_statement" => {
                 if let Some(node_id) = self.extract_import(child, source, file_path, graph) {
                     graph.add_edge(file_node_id, node_id, Edge::new(EdgeKind::Imports));
@@ -726,6 +732,59 @@ impl TypeScriptParser {
         Some(graph.add_node(iface_node))
     }
 
+    /// Extract an enum declaration
+    ///
+    /// TypeScript enums are modeled as Class nodes with enum members as fields.
+    /// Both regular and `const` enums share the same `enum_declaration` node type.
+    fn extract_enum(
+        &self,
+        node: &tree_sitter::Node,
+        source: &str,
+        file_path: &Path,
+        graph: &mut CodeGraph,
+    ) -> Option<NodeId> {
+        let name_node = node.child_by_field_name("name")?;
+        let name = name_node.utf8_text(source.as_bytes()).ok()?.to_string();
+
+        let mut fields = Vec::new();
+
+        if let Some(body) = node.child_by_field_name("body") {
+            let mut cursor = body.walk();
+            for child in body.children(&mut cursor) {
+                match child.kind() {
+                    "property_identifier" => {
+                        if let Ok(member_name) = child.utf8_text(source.as_bytes()) {
+                            fields.push(member_name.to_string());
+                        }
+                    }
+                    "enum_assignment" => {
+                        if let Some(name_child) = child.child_by_field_name("name") {
+                            if let Ok(member_name) = name_child.utf8_text(source.as_bytes()) {
+                                fields.push(member_name.to_string());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let mut enum_node = Node::new(
+            NodeKind::Class,
+            name,
+            file_path.to_path_buf(),
+            node.start_position().row + 1,
+            NodeData::Class {
+                base_classes: vec![],
+                methods: vec![],
+                fields,
+            },
+        );
+        enum_node.set_end_line(node.end_position().row + 1);
+
+        Some(graph.add_node(enum_node))
+    }
+
     /// Extract method signatures from an interface body
     fn extract_interface_methods(&self, node: &tree_sitter::Node, source: &str) -> Vec<String> {
         let mut methods = Vec::new();
@@ -876,6 +935,7 @@ impl TypeScriptParser {
                 "function_declaration"
                 | "class_declaration"
                 | "abstract_class_declaration"
+                | "enum_declaration"
                 | "interface_declaration"
                 | "type_alias_declaration"
                 | "lexical_declaration"

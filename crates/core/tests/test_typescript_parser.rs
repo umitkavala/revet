@@ -683,3 +683,100 @@ const MAX_RETRIES = 3;
         panic!("Expected Variable node data");
     }
 }
+
+#[test]
+fn test_parse_enums() {
+    let source = r#"
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right
+}
+
+enum Color {
+    Red = "RED",
+    Green = "GREEN",
+    Blue = "BLUE"
+}
+
+const enum Status {
+    Active = 1,
+    Inactive = 0
+}
+
+export enum HttpMethod {
+    GET = "GET",
+    POST = "POST",
+    PUT = "PUT",
+    DELETE = "DELETE"
+}
+"#;
+
+    let mut graph = CodeGraph::new(PathBuf::from("/test"));
+    let dispatcher = ParserDispatcher::new();
+    let parser = dispatcher.find_parser(&PathBuf::from("test.ts")).unwrap();
+
+    parser
+        .parse_source(source, &PathBuf::from("test.ts"), &mut graph)
+        .unwrap();
+
+    // Enums are modeled as Class nodes
+    let classes: Vec<_> = graph
+        .nodes()
+        .filter(|(_, n)| matches!(n.kind(), NodeKind::Class))
+        .collect();
+
+    assert_eq!(classes.len(), 4, "Expected 4 enums");
+
+    let class_names: Vec<&str> = classes.iter().map(|(_, n)| n.name()).collect();
+    assert!(class_names.contains(&"Direction"));
+    assert!(class_names.contains(&"Color"));
+    assert!(class_names.contains(&"Status"));
+    assert!(class_names.contains(&"HttpMethod"));
+
+    // Verify Direction members (no values)
+    let direction = classes
+        .iter()
+        .find(|(_, n)| n.name() == "Direction")
+        .unwrap();
+    if let NodeData::Class { fields, .. } = direction.1.data() {
+        assert_eq!(fields, &["Up", "Down", "Left", "Right"]);
+    } else {
+        panic!("Expected Class node data");
+    }
+
+    // Verify Color members (string values)
+    let color = classes.iter().find(|(_, n)| n.name() == "Color").unwrap();
+    if let NodeData::Class { fields, .. } = color.1.data() {
+        assert_eq!(fields, &["Red", "Green", "Blue"]);
+    } else {
+        panic!("Expected Class node data");
+    }
+
+    // Verify Status members (numeric values, const enum)
+    let status = classes.iter().find(|(_, n)| n.name() == "Status").unwrap();
+    if let NodeData::Class { fields, .. } = status.1.data() {
+        assert_eq!(fields, &["Active", "Inactive"]);
+    } else {
+        panic!("Expected Class node data");
+    }
+
+    // Verify HttpMethod (exported enum)
+    let http_method = classes
+        .iter()
+        .find(|(_, n)| n.name() == "HttpMethod")
+        .unwrap();
+    if let NodeData::Class {
+        fields,
+        base_classes,
+        methods,
+    } = http_method.1.data()
+    {
+        assert_eq!(fields, &["GET", "POST", "PUT", "DELETE"]);
+        assert!(base_classes.is_empty(), "Enums have no base classes");
+        assert!(methods.is_empty(), "Enums have no methods");
+    } else {
+        panic!("Expected Class node data");
+    }
+}
