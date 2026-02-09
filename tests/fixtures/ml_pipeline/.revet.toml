@@ -1,0 +1,7 @@
+[general]
+languages = ["python"]
+
+[modules]
+ml = true
+security = false
+infra = false

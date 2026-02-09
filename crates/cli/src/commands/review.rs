@@ -3,9 +3,9 @@
 use anyhow::Result;
 use colored::Colorize;
 use revet_core::{
-    discover_files, AnalyzerDispatcher, CodeGraph, DiffAnalyzer, Finding, GitTreeReader,
-    GraphCache, GraphCacheMeta, ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary,
-    Severity,
+    discover_files, discover_files_extended, AnalyzerDispatcher, CodeGraph, DiffAnalyzer, Finding,
+    GitTreeReader, GraphCache, GraphCacheMeta, ImpactAnalysis, ParserDispatcher, RevetConfig,
+    ReviewSummary, Severity,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -29,9 +29,20 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<()> {
 
     // ── 2. File Discovery ────────────────────────────────────────
     let dispatcher = ParserDispatcher::new();
+    let analyzer_dispatcher = AnalyzerDispatcher::new();
     let extensions = dispatcher.supported_extensions();
 
-    let files = discover_review_files(&repo_path, cli, &config, &extensions)?;
+    // Merge parser extensions with analyzer-specific extensions
+    let extra_exts = analyzer_dispatcher.extra_extensions(&config);
+    let extra_names = analyzer_dispatcher.extra_filenames(&config);
+    let mut all_extensions: Vec<&str> = extensions.clone();
+    for ext in &extra_exts {
+        if !all_extensions.contains(ext) {
+            all_extensions.push(ext);
+        }
+    }
+
+    let files = discover_review_files(&repo_path, cli, &config, &all_extensions, &extra_names)?;
 
     if files.is_empty() {
         print_no_files(format, start);
@@ -135,7 +146,6 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<()> {
     // ── 4b. Domain Analyzers ─────────────────────────────────────
     print!("  Running domain analyzers... ");
     let analyzer_start = Instant::now();
-    let analyzer_dispatcher = AnalyzerDispatcher::new();
     let analyzer_findings = analyzer_dispatcher.run_all(&files, &repo_path, &config);
     let analyzer_count = analyzer_findings.len();
     findings.extend(analyzer_findings);
@@ -241,13 +251,11 @@ fn discover_review_files(
     repo_path: &Path,
     cli: &crate::Cli,
     config: &RevetConfig,
-    extensions: &[&str],
+    all_extensions: &[&str],
+    extra_filenames: &[&str],
 ) -> Result<Vec<PathBuf>> {
     if cli.full {
-        print!("  Discovering files (full scan)... ");
-        let files = discover_files(repo_path, extensions, &config.ignore.paths)?;
-        println!("{} ({} files)", "done".green(), files.len());
-        return Ok(files);
+        return full_scan(repo_path, all_extensions, extra_filenames, config);
     }
 
     // Try diff-based discovery
@@ -263,7 +271,10 @@ fn discover_review_files(
                         .into_iter()
                         .filter_map(|cf| {
                             let abs = repo_path.join(&cf.path);
-                            if abs.exists() && has_extension(&cf.path, extensions) {
+                            if abs.exists()
+                                && (has_extension(&cf.path, all_extensions)
+                                    || has_filename(&cf.path, extra_filenames))
+                            {
                                 Some(abs)
                             } else {
                                 None
@@ -277,7 +288,7 @@ fn discover_review_files(
                             "  {} — falling back to full scan",
                             "No supported changed files".dimmed()
                         );
-                        return full_scan(repo_path, extensions, config);
+                        return full_scan(repo_path, all_extensions, extra_filenames, config);
                     }
 
                     Ok(files)
@@ -291,20 +302,29 @@ fn discover_review_files(
                         )
                         .dimmed()
                     );
-                    full_scan(repo_path, extensions, config)
+                    full_scan(repo_path, all_extensions, extra_filenames, config)
                 }
             }
         }
         Err(_) => {
             println!("  {} — running full scan", "Not a git repository".dimmed());
-            full_scan(repo_path, extensions, config)
+            full_scan(repo_path, all_extensions, extra_filenames, config)
         }
     }
 }
 
-fn full_scan(repo_path: &Path, extensions: &[&str], config: &RevetConfig) -> Result<Vec<PathBuf>> {
+fn full_scan(
+    repo_path: &Path,
+    extensions: &[&str],
+    filenames: &[&str],
+    config: &RevetConfig,
+) -> Result<Vec<PathBuf>> {
     print!("  Discovering files (full scan)... ");
-    let files = discover_files(repo_path, extensions, &config.ignore.paths)?;
+    let files = if filenames.is_empty() {
+        discover_files(repo_path, extensions, &config.ignore.paths)?
+    } else {
+        discover_files_extended(repo_path, extensions, filenames, &config.ignore.paths)?
+    };
     println!("{} ({} files)", "done".green(), files.len());
     Ok(files)
 }
@@ -316,6 +336,16 @@ fn has_extension(path: &Path, extensions: &[&str]) -> bool {
     };
     let with_dot = format!(".{}", ext);
     extensions.contains(&with_dot.as_str())
+}
+
+fn has_filename(path: &Path, filenames: &[&str]) -> bool {
+    if filenames.is_empty() {
+        return false;
+    }
+    match path.file_name().and_then(|n| n.to_str()) {
+        Some(name) => filenames.contains(&name),
+        None => false,
+    }
 }
 
 fn build_summary(

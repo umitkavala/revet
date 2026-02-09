@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-deployment
+  labels:
+    app: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: app
+          image: myregistry/app:v1.2.3
+          ports:
+            - containerPort: 3000
+          securityContext:
+            # INFRA Warning: Privileged container
+            # (matches privileged:\s*true)
+            privileged: true
+      volumes:
+        - name: data
+          # INFRA Warning: HostPath volume mount
+          # (matches hostPath:\s*$)
+          hostPath:
+            path: /var/data

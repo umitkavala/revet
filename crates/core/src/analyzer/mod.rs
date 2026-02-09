@@ -33,6 +33,17 @@ pub trait Analyzer: Send + Sync {
     /// `repo_root` is the absolute path to the repository root, used to
     /// produce relative file paths in findings.
     fn analyze_files(&self, files: &[PathBuf], repo_root: &Path) -> Vec<Finding>;
+
+    /// Additional file extensions this analyzer needs beyond parser extensions.
+    /// Returns extensions with leading dot (e.g., `[".tf", ".yaml"]`).
+    fn extra_extensions(&self) -> &[&str] {
+        &[]
+    }
+
+    /// Additional exact filenames this analyzer needs (e.g., `["Dockerfile"]`).
+    fn extra_filenames(&self) -> &[&str] {
+        &[]
+    }
 }
 
 /// Dispatches analysis across all registered analyzers
@@ -51,6 +62,33 @@ impl AnalyzerDispatcher {
                 Box::new(infra::InfraAnalyzer::new()),
             ],
         }
+    }
+
+    /// Collect extra file extensions needed by enabled analyzers.
+    /// Returns extensions with leading dot (e.g., `".tf"`).
+    pub fn extra_extensions(&self, config: &RevetConfig) -> Vec<&str> {
+        let mut exts = Vec::new();
+        for analyzer in &self.analyzers {
+            if analyzer.is_enabled(config) {
+                exts.extend_from_slice(analyzer.extra_extensions());
+            }
+        }
+        exts.sort();
+        exts.dedup();
+        exts
+    }
+
+    /// Collect extra filenames needed by enabled analyzers (e.g., `"Dockerfile"`).
+    pub fn extra_filenames(&self, config: &RevetConfig) -> Vec<&str> {
+        let mut names = Vec::new();
+        for analyzer in &self.analyzers {
+            if analyzer.is_enabled(config) {
+                names.extend_from_slice(analyzer.extra_filenames());
+            }
+        }
+        names.sort();
+        names.dedup();
+        names
     }
 
     /// Run all enabled analyzers and return combined findings

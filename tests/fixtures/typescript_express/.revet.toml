@@ -1,0 +1,7 @@
+[general]
+languages = ["typescript"]
+
+[modules]
+ml = false
+security = true
+infra = false

@@ -264,4 +264,12 @@ impl Analyzer for InfraAnalyzer {
 
         findings
     }
+
+    fn extra_extensions(&self) -> &[&str] {
+        &[".tf", ".tfvars", ".yaml", ".yml", ".json"]
+    }
+
+    fn extra_filenames(&self) -> &[&str] {
+        &["Dockerfile"]
+    }
 }
