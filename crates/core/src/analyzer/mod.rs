@@ -4,6 +4,7 @@
 //! [`Finding`]s. Each analyzer is independent and can be enabled/disabled
 //! via `.revet.toml`.
 
+pub mod async_patterns;
 pub mod infra;
 pub mod ml_pipeline;
 pub mod react_hooks;
@@ -62,6 +63,7 @@ impl AnalyzerDispatcher {
                 Box::new(ml_pipeline::MlPipelineAnalyzer::new()),
                 Box::new(infra::InfraAnalyzer::new()),
                 Box::new(react_hooks::ReactHooksAnalyzer::new()),
+                Box::new(async_patterns::AsyncPatternsAnalyzer::new()),
             ],
         }
     }

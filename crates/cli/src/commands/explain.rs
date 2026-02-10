@@ -116,6 +116,57 @@ const EXPLANATIONS: &[CategoryExplanation] = &[
         ],
     },
     CategoryExplanation {
+        prefix: "HOOKS",
+        name: "React Hooks Anti-Pattern",
+        description: "Violations of the Rules of Hooks and common React anti-patterns. \
+            Hooks must be called at the top level of a component (not inside conditions, \
+            loops, or nested functions) and must always be called in the same order.",
+        why_it_matters: &[
+            "Conditional hook calls break React's internal state tracking, causing crashes",
+            "Missing dependency arrays cause useEffect to run every render, harming performance",
+            "Direct DOM manipulation bypasses React's virtual DOM, leading to stale or lost state",
+            "Missing key props in lists cause incorrect re-renders and subtle UI bugs",
+        ],
+        how_to_fix: &[
+            "Always call hooks at the top level of your component, never inside conditions or loops",
+            "Add a dependency array to useEffect: useEffect(() => { ... }, [dep1, dep2])",
+            "Use useRef() instead of document.getElementById or querySelector",
+            "Add a unique key prop when rendering lists: items.map(item => <Item key={item.id} />)",
+        ],
+        example_bad: r#"    if (isReady) useState(0);  // Hook inside condition"#,
+        example_good: r#"    const [value, setValue] = useState(0);  // Always at top level"#,
+        references: &[
+            "Rules of Hooks: https://react.dev/reference/rules/rules-of-hooks",
+            "useEffect: https://react.dev/reference/react/useEffect",
+        ],
+    },
+    CategoryExplanation {
+        prefix: "ASYNC",
+        name: "Async Pattern Anti-Pattern",
+        description: "Async/await misuse in JavaScript, TypeScript, and Python that causes \
+            unhandled promise rejections, silent failures, race conditions, or floating \
+            coroutines. These patterns compile and often appear to work, but fail under \
+            load or error conditions.",
+        why_it_matters: &[
+            "Unhandled promise rejections crash Node.js processes in production",
+            "forEach with async callbacks runs iterations in parallel without control",
+            "Floating coroutines in Python silently do nothing — the work never executes",
+            "Swallowed errors in .catch(() => {}) hide failures that should be investigated",
+        ],
+        how_to_fix: &[
+            "Replace new Promise(async ...) with a plain async function or non-async executor",
+            "Use for...of or Promise.all(items.map(...)) instead of .forEach(async ...)",
+            "Always await asyncio calls in Python: await asyncio.sleep(1)",
+            "Add .catch() to every .then() chain, or use async/await with try/catch",
+        ],
+        example_bad: r#"    items.forEach(async (item) => { await process(item); });"#,
+        example_good: r#"    for (const item of items) { await process(item); }"#,
+        references: &[
+            "MDN Async/Await: https://developer.mozilla.org/en-US/docs/Learn/JavaScript/Asynchronous",
+            "Python asyncio: https://docs.python.org/3/library/asyncio.html",
+        ],
+    },
+    CategoryExplanation {
         prefix: "IMPACT",
         name: "Change Impact",
         description: "Breaking or significant changes detected by comparing the current code \
@@ -294,7 +345,9 @@ mod tests {
 
     #[test]
     fn test_all_known_prefixes() {
-        let known = ["SEC", "SQL", "ML", "INFRA", "IMPACT", "PARSE"];
+        let known = [
+            "SEC", "SQL", "ML", "INFRA", "HOOKS", "ASYNC", "IMPACT", "PARSE",
+        ];
         for prefix in &known {
             assert!(
                 get_explanation(prefix).is_some(),
