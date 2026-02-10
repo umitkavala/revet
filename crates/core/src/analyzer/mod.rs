@@ -6,6 +6,7 @@
 
 pub mod infra;
 pub mod ml_pipeline;
+pub mod react_hooks;
 pub mod secret_exposure;
 pub mod sql_injection;
 
@@ -60,6 +61,7 @@ impl AnalyzerDispatcher {
                 Box::new(sql_injection::SqlInjectionAnalyzer::new()),
                 Box::new(ml_pipeline::MlPipelineAnalyzer::new()),
                 Box::new(infra::InfraAnalyzer::new()),
+                Box::new(react_hooks::ReactHooksAnalyzer::new()),
             ],
         }
     }
