@@ -7,6 +7,7 @@
 //! - Graph caching for incremental analysis
 
 pub mod analyzer;
+pub mod baseline;
 pub mod cache;
 pub mod config;
 pub mod diff;
@@ -18,6 +19,7 @@ pub mod parser;
 pub mod store;
 
 pub use analyzer::{Analyzer, AnalyzerDispatcher};
+pub use baseline::{filter_findings, Baseline, BaselineEntry};
 pub use cache::{GraphCache, GraphCacheMeta};
 pub use config::RevetConfig;
 pub use diff::{

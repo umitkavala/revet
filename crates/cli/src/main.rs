@@ -45,6 +45,10 @@ pub(crate) struct Cli {
     #[arg(long, global = true)]
     fix: bool,
 
+    /// Ignore baseline — show all findings
+    #[arg(long, global = true)]
+    no_baseline: bool,
+
     /// Max cost for LLM calls in USD
     #[arg(long, global = true)]
     max_cost: Option<f64>,
@@ -73,6 +77,16 @@ enum Commands {
         /// Path to repository (default: current directory)
         path: Option<PathBuf>,
     },
+
+    /// Snapshot current findings as a baseline
+    Baseline {
+        /// Path to repository (default: current directory)
+        path: Option<PathBuf>,
+
+        /// Remove the existing baseline
+        #[arg(long)]
+        clear: bool,
+    },
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -98,6 +112,9 @@ fn main() -> Result<()> {
             if exit_code == commands::review::ReviewExitCode::FindingsExceedThreshold {
                 std::process::exit(1);
             }
+        }
+        Some(Commands::Baseline { ref path, clear }) => {
+            commands::baseline::run(path.as_deref(), clear)?;
         }
         None => {
             let exit_code = commands::review::run(None, &cli)?;
