@@ -70,8 +70,10 @@ impl ImpactAnalysis {
 
     /// Check if a node has changed between old and new versions
     fn node_changed(&self, old_node: &crate::graph::Node, new_node: &crate::graph::Node) -> bool {
-        // Compare node data
-        old_node.data() != new_node.data() || old_node.line() != new_node.line()
+        // Compare node data, line, and type parameters
+        old_node.data() != new_node.data()
+            || old_node.line() != new_node.line()
+            || old_node.type_parameters() != new_node.type_parameters()
     }
 
     /// Analyze the impact of changes
@@ -113,6 +115,11 @@ impl ImpactAnalysis {
             Some(n) => n,
             None => return ChangeClassification::Safe, // New additions are safe
         };
+
+        // Type parameter changes are always breaking
+        if old_node.type_parameters() != new_node.type_parameters() {
+            return ChangeClassification::Breaking;
+        }
 
         // Compare based on node type
         match (old_node.data(), new_node.data()) {

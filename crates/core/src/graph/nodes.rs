@@ -27,6 +27,10 @@ pub struct Node {
     /// Decorators/annotations applied to this entity
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     decorators: Vec<String>,
+
+    /// Type parameters (generics) on this entity, e.g. ["T", "T extends Foo", "T = string"]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    type_parameters: Vec<String>,
 }
 
 impl Node {
@@ -45,6 +49,7 @@ impl Node {
             end_line: None,
             data,
             decorators: Vec::new(),
+            type_parameters: Vec::new(),
         }
     }
 
@@ -88,6 +93,16 @@ impl Node {
     /// Set the decorators/annotations for this entity
     pub fn set_decorators(&mut self, decorators: Vec<String>) {
         self.decorators = decorators;
+    }
+
+    /// Get the type parameters (generics) on this entity
+    pub fn type_parameters(&self) -> &[String] {
+        &self.type_parameters
+    }
+
+    /// Set the type parameters (generics) for this entity
+    pub fn set_type_parameters(&mut self, type_parameters: Vec<String>) {
+        self.type_parameters = type_parameters;
     }
 }
 

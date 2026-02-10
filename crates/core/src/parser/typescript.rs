@@ -190,6 +190,7 @@ impl TypeScriptParser {
 
         let parameters = self.extract_parameters(node, source);
         let return_type = self.extract_return_type(node, source);
+        let type_parameters = self.extract_type_parameters(node, source);
 
         let mut func_node = Node::new(
             NodeKind::Function,
@@ -202,6 +203,9 @@ impl TypeScriptParser {
             },
         );
         func_node.set_end_line(node.end_position().row + 1);
+        if !type_parameters.is_empty() {
+            func_node.set_type_parameters(type_parameters);
+        }
 
         let node_id = graph.add_node(func_node);
         function_nodes.insert(name.clone(), node_id);
@@ -261,6 +265,7 @@ impl TypeScriptParser {
                     // Extract as Function node
                     let parameters = self.extract_parameters_from_node(val, source);
                     let return_type = self.extract_return_type(val, source);
+                    let type_parameters = self.extract_type_parameters(val, source);
 
                     let mut func_node = Node::new(
                         NodeKind::Function,
@@ -273,6 +278,9 @@ impl TypeScriptParser {
                         },
                     );
                     func_node.set_end_line(node.end_position().row + 1);
+                    if !type_parameters.is_empty() {
+                        func_node.set_type_parameters(type_parameters);
+                    }
 
                     let node_id = graph.add_node(func_node);
                     function_nodes.insert(name.clone(), node_id);
@@ -511,6 +519,60 @@ impl TypeScriptParser {
             .and_then(|t| self.extract_type_text(&t, source))
     }
 
+    /// Extract type parameters (generics) from a declaration node.
+    ///
+    /// Tree-sitter represents generics as a `type_parameters` child node containing
+    /// individual `type_parameter` children. Each has a `name`, optional `constraint`
+    /// (e.g. `extends Foo`), and optional `value` (default type, e.g. `= string`).
+    /// Returns strings like `["T", "T extends Foo", "K = string"]`.
+    fn extract_type_parameters(&self, node: &tree_sitter::Node, source: &str) -> Vec<String> {
+        let tp_node = match node.child_by_field_name("type_parameters") {
+            Some(n) => n,
+            None => return Vec::new(),
+        };
+
+        let mut result = Vec::new();
+        let mut cursor = tp_node.walk();
+        for child in tp_node.children(&mut cursor) {
+            if child.kind() != "type_parameter" {
+                continue;
+            }
+
+            let name = match child.child_by_field_name("name") {
+                Some(n) => match n.utf8_text(source.as_bytes()) {
+                    Ok(s) => s.to_string(),
+                    Err(_) => continue,
+                },
+                None => continue,
+            };
+
+            let constraint = child
+                .child_by_field_name("constraint")
+                .and_then(|c| {
+                    // constraint node is a `constraint` containing the type
+                    // The text includes "extends Foo"
+                    c.utf8_text(source.as_bytes()).ok()
+                })
+                .map(|s| s.trim().to_string());
+
+            let default = child
+                .child_by_field_name("value")
+                .and_then(|v| v.utf8_text(source.as_bytes()).ok())
+                .map(|s| s.trim().to_string());
+
+            let param = match (constraint, default) {
+                (Some(c), Some(d)) => format!("{name} {c} = {d}"),
+                (Some(c), None) => format!("{name} {c}"),
+                (None, Some(d)) => format!("{name} = {d}"),
+                (None, None) => name,
+            };
+
+            result.push(param);
+        }
+
+        result
+    }
+
     /// Extract decorator names from a node's `decorator` children
     ///
     /// Tree-sitter represents decorators as child nodes of the decorated declaration.
@@ -622,6 +684,7 @@ impl TypeScriptParser {
 
         let base_classes = self.extract_heritage_classes(node, source);
         let decorators = self.extract_decorators(node, source);
+        let type_parameters = self.extract_type_parameters(node, source);
         let (methods, fields) =
             self.extract_class_members(node, source, file_path, graph, &name, function_nodes);
 
@@ -639,6 +702,9 @@ impl TypeScriptParser {
         class_node.set_end_line(node.end_position().row + 1);
         if !decorators.is_empty() {
             class_node.set_decorators(decorators);
+        }
+        if !type_parameters.is_empty() {
+            class_node.set_type_parameters(type_parameters);
         }
 
         Some(graph.add_node(class_node))
@@ -730,6 +796,7 @@ impl TypeScriptParser {
                             let method_name = method_name.to_string();
                             let parameters = self.extract_parameters(&child, source);
                             let return_type = self.extract_return_type(&child, source);
+                            let type_parameters = self.extract_type_parameters(&child, source);
 
                             let mut method_node = Node::new(
                                 NodeKind::Function,
@@ -744,6 +811,9 @@ impl TypeScriptParser {
                             method_node.set_end_line(child.end_position().row + 1);
                             if !pending_decorators.is_empty() {
                                 method_node.set_decorators(std::mem::take(&mut pending_decorators));
+                            }
+                            if !type_parameters.is_empty() {
+                                method_node.set_type_parameters(type_parameters);
                             }
 
                             let method_id = graph.add_node(method_node);
@@ -783,6 +853,7 @@ impl TypeScriptParser {
         let name = name_node.utf8_text(source.as_bytes()).ok()?.to_string();
 
         let methods = self.extract_interface_methods(node, source);
+        let type_parameters = self.extract_type_parameters(node, source);
 
         let mut iface_node = Node::new(
             NodeKind::Interface,
@@ -792,6 +863,9 @@ impl TypeScriptParser {
             NodeData::Interface { methods },
         );
         iface_node.set_end_line(node.end_position().row + 1);
+        if !type_parameters.is_empty() {
+            iface_node.set_type_parameters(type_parameters);
+        }
 
         Some(graph.add_node(iface_node))
     }
@@ -889,13 +963,18 @@ impl TypeScriptParser {
             .unwrap_or("")
             .to_string();
 
-        let type_node = Node::new(
+        let type_parameters = self.extract_type_parameters(node, source);
+
+        let mut type_node = Node::new(
             NodeKind::Type,
             name,
             file_path.to_path_buf(),
             node.start_position().row + 1,
             NodeData::Type { definition },
         );
+        if !type_parameters.is_empty() {
+            type_node.set_type_parameters(type_parameters);
+        }
 
         Some(graph.add_node(type_node))
     }

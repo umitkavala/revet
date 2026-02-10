@@ -849,3 +849,240 @@ class User {
     assert_eq!(methods.len(), 1);
     assert_eq!(methods[0].1.decorators(), &["HostListener"]);
 }
+
+#[test]
+fn test_parse_generics() {
+    let source = r#"
+function identity<T>(arg: T): T {
+    return arg;
+}
+
+function map<T, U>(arr: T[], fn: (item: T) => U): U[] {
+    return arr.map(fn);
+}
+
+function constrained<T extends Comparable>(a: T, b: T): T {
+    return a;
+}
+
+function withDefault<T = string>(value: T): T {
+    return value;
+}
+
+const arrow = <T>(x: T): T => x;
+
+class Box<T> {
+    value: T;
+
+    constructor(value: T) {
+        this.value = value;
+    }
+
+    unwrap(): T {
+        return this.value;
+    }
+
+    transform<U>(fn: (val: T) => U): Box<U> {
+        return new Box(fn(this.value));
+    }
+}
+
+interface Repository<T extends Entity> {
+    find(id: string): T;
+    save(item: T): void;
+}
+
+type Mapper<K, V> = (key: K) => V;
+
+type WithDefault<T = number> = { value: T };
+
+class Pair<A, B extends Serializable> {
+    constructor(public first: A, public second: B) {}
+}
+
+export function exported<T>(x: T): T { return x; }
+"#;
+
+    let mut graph = CodeGraph::new(PathBuf::from("/test"));
+    let dispatcher = ParserDispatcher::new();
+    let parser = dispatcher.find_parser(&PathBuf::from("test.ts")).unwrap();
+
+    parser
+        .parse_source(source, &PathBuf::from("test.ts"), &mut graph)
+        .unwrap();
+
+    // --- Functions ---
+    let functions: Vec<_> = graph
+        .nodes()
+        .filter(|(_, n)| matches!(n.kind(), NodeKind::Function))
+        .collect();
+
+    // identity<T>
+    let identity = functions
+        .iter()
+        .find(|(_, n)| n.name() == "identity")
+        .unwrap();
+    assert_eq!(identity.1.type_parameters(), &["T"]);
+
+    // map<T, U>
+    let map_fn = functions.iter().find(|(_, n)| n.name() == "map").unwrap();
+    assert_eq!(map_fn.1.type_parameters(), &["T", "U"]);
+
+    // constrained<T extends Comparable>
+    let constrained = functions
+        .iter()
+        .find(|(_, n)| n.name() == "constrained")
+        .unwrap();
+    assert_eq!(constrained.1.type_parameters().len(), 1);
+    assert!(
+        constrained.1.type_parameters()[0].contains("T"),
+        "should contain T"
+    );
+    assert!(
+        constrained.1.type_parameters()[0].contains("extends"),
+        "should contain extends"
+    );
+    assert!(
+        constrained.1.type_parameters()[0].contains("Comparable"),
+        "should contain Comparable"
+    );
+
+    // withDefault<T = string>
+    let with_default = functions
+        .iter()
+        .find(|(_, n)| n.name() == "withDefault")
+        .unwrap();
+    assert_eq!(with_default.1.type_parameters().len(), 1);
+    assert!(
+        with_default.1.type_parameters()[0].contains("T"),
+        "should contain T"
+    );
+    assert!(
+        with_default.1.type_parameters()[0].contains("= string"),
+        "should contain = string"
+    );
+
+    // arrow<T>
+    let arrow = functions.iter().find(|(_, n)| n.name() == "arrow").unwrap();
+    assert_eq!(arrow.1.type_parameters(), &["T"]);
+
+    // exported<T>
+    let exported = functions
+        .iter()
+        .find(|(_, n)| n.name() == "exported")
+        .unwrap();
+    assert_eq!(exported.1.type_parameters(), &["T"]);
+
+    // --- Class methods ---
+    // Box.transform<U>
+    let transform = functions
+        .iter()
+        .find(|(_, n)| n.name() == "transform")
+        .unwrap();
+    assert_eq!(transform.1.type_parameters(), &["U"]);
+
+    // Box.unwrap() — no generics on the method itself
+    let unwrap = functions
+        .iter()
+        .find(|(_, n)| n.name() == "unwrap")
+        .unwrap();
+    assert!(unwrap.1.type_parameters().is_empty());
+
+    // --- Classes ---
+    let classes: Vec<_> = graph
+        .nodes()
+        .filter(|(_, n)| matches!(n.kind(), NodeKind::Class))
+        .collect();
+
+    // Box<T>
+    let box_class = classes.iter().find(|(_, n)| n.name() == "Box").unwrap();
+    assert_eq!(box_class.1.type_parameters(), &["T"]);
+
+    // Pair<A, B extends Serializable>
+    let pair = classes.iter().find(|(_, n)| n.name() == "Pair").unwrap();
+    assert_eq!(pair.1.type_parameters().len(), 2);
+    assert_eq!(pair.1.type_parameters()[0], "A");
+    assert!(pair.1.type_parameters()[1].contains("B"));
+    assert!(pair.1.type_parameters()[1].contains("extends"));
+    assert!(pair.1.type_parameters()[1].contains("Serializable"));
+
+    // --- Interfaces ---
+    let interfaces: Vec<_> = graph
+        .nodes()
+        .filter(|(_, n)| matches!(n.kind(), NodeKind::Interface))
+        .collect();
+
+    // Repository<T extends Entity>
+    let repo = interfaces
+        .iter()
+        .find(|(_, n)| n.name() == "Repository")
+        .unwrap();
+    assert_eq!(repo.1.type_parameters().len(), 1);
+    assert!(repo.1.type_parameters()[0].contains("T"));
+    assert!(repo.1.type_parameters()[0].contains("extends"));
+    assert!(repo.1.type_parameters()[0].contains("Entity"));
+
+    // --- Type aliases ---
+    let types: Vec<_> = graph
+        .nodes()
+        .filter(|(_, n)| matches!(n.kind(), NodeKind::Type))
+        .collect();
+
+    // Mapper<K, V>
+    let mapper = types.iter().find(|(_, n)| n.name() == "Mapper").unwrap();
+    assert_eq!(mapper.1.type_parameters(), &["K", "V"]);
+
+    // WithDefault<T = number>
+    let with_default_type = types
+        .iter()
+        .find(|(_, n)| n.name() == "WithDefault")
+        .unwrap();
+    assert_eq!(with_default_type.1.type_parameters().len(), 1);
+    assert!(with_default_type.1.type_parameters()[0].contains("T"));
+    assert!(with_default_type.1.type_parameters()[0].contains("= number"));
+}
+
+#[test]
+fn test_generics_do_not_affect_non_generic_nodes() {
+    let source = r#"
+function plain(x: number): number {
+    return x;
+}
+
+class SimpleClass {
+    value: string;
+
+    constructor(value: string) {
+        this.value = value;
+    }
+}
+
+interface SimpleInterface {
+    name: string;
+    getValue(): string;
+}
+
+type SimpleAlias = string | number;
+
+const simpleArrow = (x: number): number => x * 2;
+"#;
+
+    let mut graph = CodeGraph::new(PathBuf::from("/test"));
+    let dispatcher = ParserDispatcher::new();
+    let parser = dispatcher.find_parser(&PathBuf::from("test.ts")).unwrap();
+
+    parser
+        .parse_source(source, &PathBuf::from("test.ts"), &mut graph)
+        .unwrap();
+
+    // All nodes should have empty type_parameters
+    for (_, node) in graph.nodes() {
+        assert!(
+            node.type_parameters().is_empty(),
+            "Node '{}' ({:?}) should have no type parameters, but has {:?}",
+            node.name(),
+            node.kind(),
+            node.type_parameters()
+        );
+    }
+}

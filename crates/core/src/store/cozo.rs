@@ -52,7 +52,8 @@ impl CozoStore {
                 line: Int,
                 end_line: Int,
                 data_json: String,
-                decorators_json: String
+                decorators_json: String,
+                type_params_json: String
             }
         "#;
 
@@ -94,9 +95,9 @@ impl CozoStore {
             }
         }
 
-        // Verify the nodes schema has the decorators_json column
+        // Verify the nodes schema has the type_params_json column
         let probe = self.run_query(
-            "?[decorators_json] := *nodes{decorators_json} :limit 1",
+            "?[type_params_json] := *nodes{type_params_json} :limit 1",
             BTreeMap::new(),
         );
         if probe.is_err() {
@@ -134,7 +135,7 @@ impl CozoStore {
     }
 
     /// Deserialize a Node from a CozoDB row
-    /// Expected columns: id, kind, name, file_path, line, end_line, data_json, decorators_json
+    /// Expected columns: id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json
     fn deserialize_node(row: &[DataValue]) -> Result<(StoreNodeId, Node)> {
         let id = row_int(&row[0])? as u64;
         let kind_str = row_str(&row[1])?;
@@ -144,6 +145,7 @@ impl CozoStore {
         let end_line_val = row_int(&row[5])?;
         let data_json = row_str(&row[6])?;
         let decorators_json = row_str(&row[7])?;
+        let type_params_json = row_str(&row[8])?;
 
         let kind: NodeKind =
             serde_json::from_str(&format!("\"{kind_str}\"")).context("invalid NodeKind")?;
@@ -159,6 +161,13 @@ impl CozoStore {
             let decorators: Vec<String> =
                 serde_json::from_str(decorators_json).context("invalid decorators")?;
             node.set_decorators(decorators);
+        }
+
+        // Restore type parameters
+        if !type_params_json.is_empty() && type_params_json != "[]" {
+            let type_params: Vec<String> =
+                serde_json::from_str(type_params_json).context("invalid type_parameters")?;
+            node.set_type_parameters(type_params);
         }
 
         Ok((StoreNodeId(id), node))
@@ -230,6 +239,7 @@ impl GraphStore for CozoStore {
             let data_json = serde_json::to_string(node.data())?;
             let end_line = node.end_line().map(|l| l as i64).unwrap_or(-1);
             let decorators_json = serde_json::to_string(node.decorators())?;
+            let type_params_json = serde_json::to_string(node.type_parameters())?;
 
             node_rows.push(vec![
                 DataValue::Str(snapshot.into()),
@@ -241,6 +251,7 @@ impl GraphStore for CozoStore {
                 DataValue::from(end_line),
                 DataValue::Str(data_json.into()),
                 DataValue::Str(decorators_json.into()),
+                DataValue::Str(type_params_json.into()),
             ]);
         }
 
@@ -287,6 +298,7 @@ impl GraphStore for CozoStore {
                         "end_line".into(),
                         "data_json".into(),
                         "decorators_json".into(),
+                        "type_params_json".into(),
                     ],
                     rows: node_rows,
                     next: None,
@@ -366,10 +378,10 @@ impl GraphStore for CozoStore {
         let mut params = BTreeMap::new();
         params.insert("snap".to_string(), snap_val.clone());
         let _ = self.run_mut_with(
-            r#"?[snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json] :=
-                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json},
+            r#"?[snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json] :=
+                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json},
                 snapshot = $snap
-            :delete nodes {snapshot, id => kind, name, file_path, line, end_line, data_json, decorators_json}"#,
+            :delete nodes {snapshot, id => kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json}"#,
             params,
         );
 
@@ -404,8 +416,8 @@ impl GraphStore for CozoStore {
         params.insert("id".to_string(), DataValue::from(id.0 as i64));
 
         let result = self.run_query(
-            r#"?[id, kind, name, file_path, line, end_line, data_json, decorators_json] :=
-                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json},
+            r#"?[id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json] :=
+                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json},
                 snapshot = $snap, id = $id"#,
             params,
         )?;
@@ -423,8 +435,8 @@ impl GraphStore for CozoStore {
         params.insert("snap".to_string(), DataValue::Str(snapshot.into()));
 
         let result = self.run_query(
-            r#"?[id, kind, name, file_path, line, end_line, data_json, decorators_json] :=
-                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json},
+            r#"?[id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json] :=
+                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json},
                 snapshot = $snap"#,
             params,
         )?;
@@ -448,12 +460,12 @@ impl GraphStore for CozoStore {
 
         let script = if let Some(n) = name {
             params.insert("name".to_string(), DataValue::Str(n.into()));
-            r#"?[id, kind, name, file_path, line, end_line, data_json, decorators_json] :=
-                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json},
+            r#"?[id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json] :=
+                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json},
                 snapshot = $snap, file_path = $fp, name = $name"#
         } else {
-            r#"?[id, kind, name, file_path, line, end_line, data_json, decorators_json] :=
-                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json},
+            r#"?[id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json] :=
+                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json},
                 snapshot = $snap, file_path = $fp"#
         };
 
@@ -478,8 +490,8 @@ impl GraphStore for CozoStore {
         );
 
         let result = self.run_query(
-            r#"?[id, kind, name, file_path, line, end_line, data_json, decorators_json] :=
-                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json},
+            r#"?[id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json] :=
+                *nodes{snapshot, id, kind, name, file_path, line, end_line, data_json, decorators_json, type_params_json},
                 snapshot = $snap, kind = $kind"#,
             params,
         )?;
