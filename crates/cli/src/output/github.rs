@@ -41,6 +41,8 @@ mod tests {
             file: PathBuf::from(format!("/repo/{}", file)),
             line,
             affected_dependents: 0,
+            suggestion: None,
+            fix_kind: None,
         }
     }
 

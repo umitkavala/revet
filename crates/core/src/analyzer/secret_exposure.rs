@@ -5,7 +5,7 @@
 
 use crate::analyzer::{make_finding, Analyzer};
 use crate::config::RevetConfig;
-use crate::finding::{Finding, Severity};
+use crate::finding::{Finding, FixKind, Severity};
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -15,6 +15,8 @@ struct SecretPattern {
     name: &'static str,
     regex: Regex,
     severity: Severity,
+    suggestion: &'static str,
+    fix_kind: FixKind,
 }
 
 /// Returns all secret patterns in priority order (Error patterns first)
@@ -26,44 +28,60 @@ fn patterns() -> &'static [SecretPattern] {
                 name: "AWS Access Key ID",
                 regex: Regex::new(r"AKIA[0-9A-Z]{16}").unwrap(),
                 severity: Severity::Error,
+                suggestion: "Use environment variable AWS_ACCESS_KEY_ID instead",
+                fix_kind: FixKind::CommentOut,
             },
             SecretPattern {
                 name: "AWS Secret Access Key",
                 regex: Regex::new(r#"(?i)aws.{0,20}['"][0-9a-zA-Z/+=]{40}['"]"#).unwrap(),
                 severity: Severity::Error,
+                suggestion: "Use environment variable AWS_SECRET_ACCESS_KEY instead",
+                fix_kind: FixKind::CommentOut,
             },
             SecretPattern {
                 name: "GitHub Token",
                 regex: Regex::new(r"gh[pousr]_[A-Za-z0-9_]{36,}").unwrap(),
                 severity: Severity::Error,
+                suggestion: "Use environment variable GITHUB_TOKEN instead",
+                fix_kind: FixKind::CommentOut,
             },
             SecretPattern {
                 name: "Private Key (PEM)",
                 regex: Regex::new(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----")
                     .unwrap(),
                 severity: Severity::Error,
+                suggestion: "Store private key in a file outside the repo and reference via path",
+                fix_kind: FixKind::CommentOut,
             },
             SecretPattern {
                 name: "Database Connection String",
                 regex: Regex::new(r#"(?i)(?:mongodb|postgres|mysql|redis)://[^\s'"]+:[^\s'"]+@"#)
                     .unwrap(),
                 severity: Severity::Error,
+                suggestion: "Store connection string in .env file or use a secrets manager",
+                fix_kind: FixKind::CommentOut,
             },
             SecretPattern {
                 name: "Generic API Key",
                 regex: Regex::new(r#"(?i)api[_\-]?key\s*[:=]\s*['"][a-zA-Z0-9]{20,}['"]"#).unwrap(),
                 severity: Severity::Warning,
+                suggestion: "Store API key in environment variable or .env file",
+                fix_kind: FixKind::CommentOut,
             },
             SecretPattern {
                 name: "Generic Secret Key",
                 regex: Regex::new(r#"(?i)secret[_\-]?key\s*[:=]\s*['"][a-zA-Z0-9]{20,}['"]"#)
                     .unwrap(),
                 severity: Severity::Warning,
+                suggestion: "Store secret key in environment variable or .env file",
+                fix_kind: FixKind::CommentOut,
             },
             SecretPattern {
                 name: "Hardcoded Password",
                 regex: Regex::new(r#"(?i)password\s*[:=]\s*['"][^'"]{8,}['"]"#).unwrap(),
                 severity: Severity::Warning,
+                suggestion: "Store password in environment variable or use a secrets manager",
+                fix_kind: FixKind::CommentOut,
             },
         ]
     })
@@ -121,6 +139,8 @@ impl SecretExposureAnalyzer {
                         format!("Possible {} detected", pat.name),
                         path.to_path_buf(),
                         line_num + 1, // 1-indexed
+                        Some(pat.suggestion.to_string()),
+                        Some(pat.fix_kind.clone()),
                     ));
                     break; // One finding per line
                 }

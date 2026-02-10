@@ -6,7 +6,7 @@
 
 use crate::analyzer::{make_finding, Analyzer};
 use crate::config::RevetConfig;
-use crate::finding::{Finding, Severity};
+use crate::finding::{Finding, FixKind, Severity};
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -22,6 +22,8 @@ struct InfraPattern {
     target_extensions: &'static [&'static str],
     /// Exact filenames this pattern targets (e.g., "Dockerfile")
     target_filenames: &'static [&'static str],
+    suggestion: &'static str,
+    fix_kind: FixKind,
 }
 
 /// Returns all infrastructure patterns in priority order (Error → Warning → Info)
@@ -38,6 +40,11 @@ fn patterns() -> &'static [InfraPattern] {
                 reject_if_contains: None,
                 target_extensions: &["tf"],
                 target_filenames: &[],
+                suggestion: "Set ACL to \"private\" to restrict bucket access",
+                fix_kind: FixKind::ReplacePattern {
+                    find: r#"public-read(?:-write)?"#.to_string(),
+                    replace: "private".to_string(),
+                },
             },
             // Pattern 2: Open security group (0.0.0.0/0)
             InfraPattern {
@@ -47,6 +54,8 @@ fn patterns() -> &'static [InfraPattern] {
                 reject_if_contains: None,
                 target_extensions: &["tf"],
                 target_filenames: &[],
+                suggestion: "Restrict CIDR block to specific IP ranges instead of 0.0.0.0/0",
+                fix_kind: FixKind::Suggestion,
             },
             // Pattern 3: Hardcoded provider credentials
             InfraPattern {
@@ -57,6 +66,8 @@ fn patterns() -> &'static [InfraPattern] {
                 reject_if_contains: Some("var."),
                 target_extensions: &["tf", "tfvars"],
                 target_filenames: &[],
+                suggestion: "Use Terraform variables or environment variables for credentials",
+                fix_kind: FixKind::Suggestion,
             },
             // ── Warning: likely problematic ──────────────────────────────
             // Pattern 4: Wildcard IAM actions
@@ -68,6 +79,8 @@ fn patterns() -> &'static [InfraPattern] {
                 reject_if_contains: Some("NotAction"),
                 target_extensions: &["tf", "json"],
                 target_filenames: &[],
+                suggestion: "Specify explicit IAM actions instead of using wildcard \"*\"",
+                fix_kind: FixKind::Suggestion,
             },
             // Pattern 5: Docker FROM :latest or no tag
             InfraPattern {
@@ -77,6 +90,8 @@ fn patterns() -> &'static [InfraPattern] {
                 reject_if_contains: Some("scratch"),
                 target_extensions: &[],
                 target_filenames: &["Dockerfile"],
+                suggestion: "Pin Docker image to a specific version tag for reproducible builds",
+                fix_kind: FixKind::Suggestion,
             },
             // Pattern 6: Privileged container
             InfraPattern {
@@ -86,6 +101,11 @@ fn patterns() -> &'static [InfraPattern] {
                 reject_if_contains: None,
                 target_extensions: &["yaml", "yml"],
                 target_filenames: &[],
+                suggestion: "Set privileged: false unless root access is strictly required",
+                fix_kind: FixKind::ReplacePattern {
+                    find: r"privileged:\s*true".to_string(),
+                    replace: "privileged: false".to_string(),
+                },
             },
             // Pattern 7: HostPath volume mount
             InfraPattern {
@@ -95,6 +115,8 @@ fn patterns() -> &'static [InfraPattern] {
                 reject_if_contains: None,
                 target_extensions: &["yaml", "yml"],
                 target_filenames: &[],
+                suggestion: "Use emptyDir, configMap, or PVC instead of hostPath volumes",
+                fix_kind: FixKind::Suggestion,
             },
             // ── Info: best practice ──────────────────────────────────────
             // Pattern 8: HTTP backend/source URL
@@ -105,6 +127,11 @@ fn patterns() -> &'static [InfraPattern] {
                 reject_if_contains: Some("localhost"),
                 target_extensions: &["tf"],
                 target_filenames: &[],
+                suggestion: "Use HTTPS instead of HTTP for secure communication",
+                fix_kind: FixKind::ReplacePattern {
+                    find: r"http://".to_string(),
+                    replace: "https://".to_string(),
+                },
             },
         ]
     })
@@ -224,6 +251,8 @@ impl InfraAnalyzer {
                     format!("Infrastructure issue: {}", pat.name),
                     path.to_path_buf(),
                     line_num + 1,
+                    Some(pat.suggestion.to_string()),
+                    Some(pat.fix_kind.clone()),
                 ));
                 break;
             }

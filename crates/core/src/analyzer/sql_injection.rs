@@ -6,7 +6,7 @@
 
 use crate::analyzer::{make_finding, Analyzer};
 use crate::config::RevetConfig;
-use crate::finding::{Finding, Severity};
+use crate::finding::{Finding, FixKind, Severity};
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -16,6 +16,7 @@ struct SqlPattern {
     name: &'static str,
     regex: Regex,
     severity: Severity,
+    suggestion: &'static str,
 }
 
 /// Returns all SQL injection patterns in priority order (Error patterns first)
@@ -37,18 +38,21 @@ fn patterns() -> &'static [SqlPattern] {
                 regex: Regex::new(&format!(r#"\.(?:objects\.raw|text)\s*\(\s*f["'].*{kw}"#))
                     .unwrap(),
                 severity: Severity::Error,
+                suggestion: "Use parameterized queries: .objects.raw('SELECT ... WHERE id = %s', [id])",
             },
             // Pattern 2: f-string SQL in DB call — .execute(f"...SQL...")
             SqlPattern {
                 name: "f-string SQL in database call",
                 regex: Regex::new(&format!(r#"\.{exec}\s*\(\s*f["'].*{kw}"#)).unwrap(),
                 severity: Severity::Error,
+                suggestion: "Use parameterized queries: .execute('SELECT ... WHERE id = ?', (id,))",
             },
             // Pattern 3: String concat SQL in DB call — .execute("...SQL..." + var)
             SqlPattern {
                 name: "string concatenation SQL in database call",
                 regex: Regex::new(&format!(r#"\.{exec}\s*\(\s*["'].*{kw}.*["']\s*\+"#)).unwrap(),
                 severity: Severity::Error,
+                suggestion: "Use parameterized queries instead of string concatenation",
             },
             // Pattern 4: .format() SQL in DB call — .execute("...SQL...".format())
             SqlPattern {
@@ -58,6 +62,7 @@ fn patterns() -> &'static [SqlPattern] {
                 ))
                 .unwrap(),
                 severity: Severity::Error,
+                suggestion: "Use parameterized queries instead of .format()",
             },
             // Pattern 5: % format SQL in DB call — .execute("...SQL..." % var)
             // Note: parameterized queries like execute("...%s", (var,)) won't match
@@ -67,6 +72,7 @@ fn patterns() -> &'static [SqlPattern] {
                 regex: Regex::new(&format!(r#"\.{exec}\s*\(\s*["'].*{kw}.*["']\s*%\s*\w"#))
                     .unwrap(),
                 severity: Severity::Error,
+                suggestion: "Use parameterized queries instead of %-formatting",
             },
             // Pattern 6: Template literal SQL in DB call — .query(`...SQL...${var}`)
             SqlPattern {
@@ -74,6 +80,7 @@ fn patterns() -> &'static [SqlPattern] {
                 regex: Regex::new(&format!(r#"\.{exec}\s*\(\s*`[^`]*{kw}[^`]*\$\{{[^`]*`"#))
                     .unwrap(),
                 severity: Severity::Error,
+                suggestion: "Use parameterized queries instead of template literals",
             },
             // ── Warning: standalone SQL strings with interpolation ──────
 
@@ -82,30 +89,35 @@ fn patterns() -> &'static [SqlPattern] {
                 name: "f-string SQL assignment",
                 regex: Regex::new(&format!(r#"=\s*f["'].*{kw}.*\{{"#)).unwrap(),
                 severity: Severity::Warning,
+                suggestion: "Use parameterized queries: pass variables as parameters, not in the query string",
             },
             // Pattern 8: String concat SQL — "...SQL..." + var
             SqlPattern {
                 name: "string concatenation SQL",
                 regex: Regex::new(&format!(r#"["'].*{kw}.*["']\s*\+\s*\w"#)).unwrap(),
                 severity: Severity::Warning,
+                suggestion: "Use parameterized queries instead of string concatenation",
             },
             // Pattern 9: .format() SQL string — "...SQL...{}".format()
             SqlPattern {
                 name: ".format() SQL string",
                 regex: Regex::new(&format!(r#"["'].*{kw}.*["']\s*\.format\s*\("#)).unwrap(),
                 severity: Severity::Warning,
+                suggestion: "Use parameterized queries instead of .format()",
             },
             // Pattern 10: % format SQL string — "...SQL...%s" % var
             SqlPattern {
                 name: "%-format SQL string",
                 regex: Regex::new(&format!(r#"["'].*{kw}.*["']\s*%\s*\w"#)).unwrap(),
                 severity: Severity::Warning,
+                suggestion: "Use parameterized queries instead of %-formatting",
             },
             // Pattern 11: Template literal SQL — var = `...SQL...${}`
             SqlPattern {
                 name: "template literal SQL",
                 regex: Regex::new(&format!(r#"`[^`]*{kw}[^`]*\$\{{[^`]*`"#)).unwrap(),
                 severity: Severity::Warning,
+                suggestion: "Use parameterized queries instead of template literals",
             },
         ]
     })
@@ -176,6 +188,8 @@ impl SqlInjectionAnalyzer {
                         format!("Possible SQL injection: {}", pat.name),
                         path.to_path_buf(),
                         line_num + 1,
+                        Some(pat.suggestion.to_string()),
+                        Some(FixKind::Suggestion),
                     ));
                     break;
                 }

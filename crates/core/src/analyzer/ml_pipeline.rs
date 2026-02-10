@@ -6,7 +6,7 @@
 
 use crate::analyzer::{make_finding, Analyzer};
 use crate::config::RevetConfig;
-use crate::finding::{Finding, Severity};
+use crate::finding::{Finding, FixKind, Severity};
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -20,6 +20,8 @@ struct MlPattern {
     reject_if_contains: Option<&'static str>,
     /// If set, the line MUST also contain this substring (positive filter)
     require_contains: Option<&'static str>,
+    suggestion: &'static str,
+    fix_kind: FixKind,
 }
 
 /// Returns all ML pipeline patterns in priority order (Error → Warning → Info)
@@ -38,6 +40,8 @@ fn patterns() -> &'static [MlPattern] {
                 severity: Severity::Error,
                 reject_if_contains: None,
                 require_contains: None,
+                suggestion: "Fit only on training data, then use .transform() on test data",
+                fix_kind: FixKind::Suggestion,
             },
             // Pattern 2: Fit on test labels — fitting on test labels
             MlPattern {
@@ -49,6 +53,8 @@ fn patterns() -> &'static [MlPattern] {
                 severity: Severity::Error,
                 reject_if_contains: None,
                 require_contains: None,
+                suggestion: "Fit only on training labels, then use .transform() on test labels",
+                fix_kind: FixKind::Suggestion,
             },
             // ── Warning: likely problematic ────────────────────────────
             // Pattern 3: train_test_split without random_state
@@ -58,6 +64,8 @@ fn patterns() -> &'static [MlPattern] {
                 severity: Severity::Warning,
                 reject_if_contains: Some("random_state"),
                 require_contains: None,
+                suggestion: "Add random_state parameter for reproducible splits: train_test_split(..., random_state=42)",
+                fix_kind: FixKind::Suggestion,
             },
             // Pattern 4: fit_transform on full dataset before split
             MlPattern {
@@ -69,6 +77,8 @@ fn patterns() -> &'static [MlPattern] {
                 severity: Severity::Warning,
                 reject_if_contains: Some("_train"),
                 require_contains: None,
+                suggestion: "Split data first, then .fit_transform() on training set only",
+                fix_kind: FixKind::Suggestion,
             },
             // Pattern 5: Pickle for model serialization
             MlPattern {
@@ -77,6 +87,11 @@ fn patterns() -> &'static [MlPattern] {
                 severity: Severity::Warning,
                 reject_if_contains: None,
                 require_contains: None,
+                suggestion: "Use joblib instead: joblib.dump()/joblib.load()",
+                fix_kind: FixKind::ReplacePattern {
+                    find: r"pickle\.".to_string(),
+                    replace: "joblib.".to_string(),
+                },
             },
             // Pattern 6: Hardcoded absolute data path
             MlPattern {
@@ -86,6 +101,8 @@ fn patterns() -> &'static [MlPattern] {
                 severity: Severity::Warning,
                 reject_if_contains: None,
                 require_contains: None,
+                suggestion: "Use relative paths or environment variables for data file paths",
+                fix_kind: FixKind::Suggestion,
             },
             // ── Info: best practices ───────────────────────────────────
             // Pattern 7: No stratify in classification split
@@ -96,6 +113,8 @@ fn patterns() -> &'static [MlPattern] {
                 severity: Severity::Info,
                 reject_if_contains: Some("stratify"),
                 require_contains: Some("random_state"),
+                suggestion: "Add stratify parameter for balanced splits: train_test_split(..., stratify=y)",
+                fix_kind: FixKind::Suggestion,
             },
             // Pattern 8: Deprecated sklearn import
             MlPattern {
@@ -104,6 +123,11 @@ fn patterns() -> &'static [MlPattern] {
                 severity: Severity::Info,
                 reject_if_contains: None,
                 require_contains: None,
+                suggestion: "Use sklearn.model_selection instead",
+                fix_kind: FixKind::ReplacePattern {
+                    find: r"sklearn\.(?:cross_validation|grid_search)".to_string(),
+                    replace: "sklearn.model_selection".to_string(),
+                },
             },
         ]
     })
@@ -194,6 +218,8 @@ impl MlPipelineAnalyzer {
                     format!("ML pipeline issue: {}", pat.name),
                     path.to_path_buf(),
                     line_num + 1,
+                    Some(pat.suggestion.to_string()),
+                    Some(pat.fix_kind.clone()),
                 ));
                 break;
             }

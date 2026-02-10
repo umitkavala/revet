@@ -21,6 +21,17 @@ impl std::fmt::Display for Severity {
     }
 }
 
+/// How a finding can be automatically fixed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FixKind {
+    /// Comment out the offending line with a FIXME annotation
+    CommentOut,
+    /// Replace a regex pattern on the offending line
+    ReplacePattern { find: String, replace: String },
+    /// Suggestion only — no auto-fix available
+    Suggestion,
+}
+
 /// A single finding from analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
@@ -41,6 +52,14 @@ pub struct Finding {
 
     /// Number of downstream dependents affected
     pub affected_dependents: usize,
+
+    /// Human-readable remediation suggestion
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggestion: Option<String>,
+
+    /// How this finding can be auto-fixed (None = no fix metadata)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fix_kind: Option<FixKind>,
 }
 
 /// Summary of an entire review run

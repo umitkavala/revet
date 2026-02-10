@@ -225,6 +225,8 @@ mod tests {
             file: PathBuf::from(file),
             line,
             affected_dependents: 0,
+            suggestion: None,
+            fix_kind: None,
         }
     }
 

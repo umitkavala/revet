@@ -3,9 +3,10 @@
 use anyhow::Result;
 use colored::Colorize;
 use revet_core::{
-    create_store, discover_files, discover_files_extended, reconstruct_graph, AnalyzerDispatcher,
-    CodeGraph, DiffAnalyzer, Finding, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore,
-    ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary, Severity,
+    apply_fixes, create_store, discover_files, discover_files_extended, reconstruct_graph,
+    AnalyzerDispatcher, CodeGraph, DiffAnalyzer, Finding, GitTreeReader, GraphCache,
+    GraphCacheMeta, GraphStore, ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary,
+    Severity,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -124,6 +125,8 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
                 file: node.file_path().clone(),
                 line: node.line(),
                 affected_dependents: total_deps,
+                suggestion: None,
+                fix_kind: None,
             });
         }
 
@@ -148,6 +151,8 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
             file: PathBuf::new(),
             line: 0,
             affected_dependents: 0,
+            suggestion: None,
+            fix_kind: None,
         });
     }
 
@@ -163,6 +168,20 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         analyzer_count,
         analyzer_start.elapsed().as_secs_f64()
     );
+
+    // ── 4c. Apply fixes ───────────────────────────────────────────
+    if cli.fix {
+        eprint!("  Applying fixes... ");
+        match apply_fixes(&findings) {
+            Ok(report) => eprintln!(
+                "{} ({} applied, {} suggestion-only)",
+                "done".green(),
+                report.applied,
+                report.skipped
+            ),
+            Err(e) => eprintln!("{}: {}", "failed".red(), e),
+        }
+    }
 
     // ── 5. Save Cache (CozoStore + metadata) ─────────────────────
     let file_paths: Vec<PathBuf> = files
@@ -423,6 +442,7 @@ fn print_terminal(findings: &[Finding], summary: &ReviewSummary, repo_path: &Pat
                 &f.message,
                 &display_path.to_string(),
                 f.line,
+                f.suggestion.as_deref(),
             )
         );
     }

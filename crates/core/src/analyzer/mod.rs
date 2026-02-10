@@ -10,7 +10,7 @@ pub mod secret_exposure;
 pub mod sql_injection;
 
 use crate::config::RevetConfig;
-use crate::finding::{Finding, Severity};
+use crate::finding::{Finding, FixKind, Severity};
 use std::path::{Path, PathBuf};
 
 /// Trait for domain-specific analyzers
@@ -141,6 +141,8 @@ pub(crate) fn make_finding(
     message: String,
     file: PathBuf,
     line: usize,
+    suggestion: Option<String>,
+    fix_kind: Option<FixKind>,
 ) -> Finding {
     Finding {
         id: String::new(), // Renumbered by dispatcher
@@ -149,5 +151,7 @@ pub(crate) fn make_finding(
         file,
         line,
         affected_dependents: 0,
+        suggestion,
+        fix_kind,
     }
 }
