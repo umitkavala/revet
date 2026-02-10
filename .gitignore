@@ -57,7 +57,10 @@ coverage.xml
 .env
 .env.local
 
-# Node (for future npm package)
+# Node
 node_modules/
 package-lock.json
 yarn.lock
+
+# npm platform binaries (built by scripts/build-npm.sh)
+npm/@revet/*/bin/

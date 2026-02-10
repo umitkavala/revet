@@ -1,0 +1,36 @@
+{
+  "name": "revet",
+  "version": "0.1.0",
+  "description": "Developer-first hybrid code review agent — deterministic static analysis with selective LLM reasoning",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/umitkavala/revet"
+  },
+  "bin": {
+    "revet": "bin/revet"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "files": [
+    "bin/",
+    "install.js"
+  ],
+  "optionalDependencies": {
+    "@revet/cli-darwin-arm64": "0.1.0",
+    "@revet/cli-darwin-x64": "0.1.0",
+    "@revet/cli-linux-arm64": "0.1.0",
+    "@revet/cli-linux-x64": "0.1.0"
+  },
+  "keywords": [
+    "code-review",
+    "static-analysis",
+    "security",
+    "linter",
+    "ast"
+  ]
+}

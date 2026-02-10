@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+
+"use strict";
+
+const { spawnSync } = require("child_process");
+const os = require("os");
+const path = require("path");
+
+const PLATFORMS = {
+  "darwin-arm64": "@revet/cli-darwin-arm64",
+  "darwin-x64": "@revet/cli-darwin-x64",
+  "linux-arm64": "@revet/cli-linux-arm64",
+  "linux-x64": "@revet/cli-linux-x64",
+};
+
+const platform = os.platform();
+const arch = os.arch();
+const key = `${platform}-${arch}`;
+const pkg = PLATFORMS[key];
+
+if (!pkg) {
+  console.error(
+    `Error: revet does not support ${platform}-${arch}.\n` +
+      `Supported platforms: ${Object.keys(PLATFORMS).join(", ")}`
+  );
+  process.exit(1);
+}
+
+let binaryPath;
+try {
+  binaryPath = require.resolve(`${pkg}/bin/revet`);
+} catch {
+  console.error(
+    `Error: could not find the revet binary for ${platform}-${arch}.\n` +
+      `The platform package ${pkg} does not appear to be installed.\n` +
+      `Try reinstalling: npm install -g revet`
+  );
+  process.exit(1);
+}
+
+const result = spawnSync(binaryPath, process.argv.slice(2), {
+  stdio: "inherit",
+});
+
+if (result.error) {
+  if (result.error.code === "EACCES") {
+    console.error(
+      `Error: permission denied when executing ${binaryPath}\n` +
+        `Try: chmod +x "${binaryPath}"`
+    );
+  } else {
+    console.error(`Error: failed to run revet: ${result.error.message}`);
+  }
+  process.exit(1);
+}
+
+process.exit(result.status ?? 1);

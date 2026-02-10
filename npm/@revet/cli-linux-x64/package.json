@@ -1,0 +1,13 @@
+{
+  "name": "@revet/cli-linux-x64",
+  "version": "0.1.0",
+  "description": "Revet CLI binary for Linux x64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/umitkavala/revet"
+  },
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "files": ["bin/"]
+}
