@@ -10,7 +10,7 @@ Revet is a developer-first code review agent that combines deterministic static 
 
 - **Not a GPT wrapper:** 80% of checks are deterministic (free, fast, reproducible)
 - **Cross-file impact analysis:** Detects breaking changes that affect other parts of your codebase
-- **Domain-specific intelligence:** Specialized modules for security, ML pipelines, infrastructure, and React
+- **Domain-specific intelligence:** Specialized modules for security, ML pipelines, infrastructure, React, and async patterns
 - **Offline-first:** All deterministic checks work without network access
 - **Code stays local:** LLMs receive structured context, not your source code
 
@@ -95,6 +95,15 @@ Detects Rules of Hooks violations and common React anti-patterns. Prefix: `HOOKS
 - Missing key prop in `.map()`, `dangerouslySetInnerHTML` (Warning)
 - Inline event handlers, empty dependency arrays (Info)
 
+### Async Patterns (`modules.async_patterns = true`, default: off)
+
+Detects async/await anti-patterns in JavaScript, TypeScript, and Python. Prefix: `ASYNC-`
+
+- Async Promise executor, `forEach` with async callback (Error)
+- Unhandled `.then()` chain, async `.map()` without `Promise.all` (Warning)
+- Async timer callback (`setTimeout`/`setInterval`), floating Python coroutine (Warning)
+- Swallowed `.catch(() => {})`, redundant `return await` (Info)
+
 ## Output Formats
 
 ```bash
@@ -125,6 +134,7 @@ security = true         # Secret exposure + SQL injection
 ml = true               # ML pipeline checks
 infra = false           # Infrastructure checks (Terraform, K8s, Docker)
 react = false           # React hooks checks
+async_patterns = false  # Async/await anti-pattern checks
 
 [ignore]
 paths = ["vendor/", "node_modules/", "dist/"]
@@ -145,7 +155,8 @@ show_evidence = true
   with:
     format: sarif         # or "github" for inline annotations
     fail_on: error        # exit code threshold
-    modules_infra: true   # enable infra checks
+    modules_infra: true           # enable infra checks
+    modules_async_patterns: true  # enable async checks
 ```
 
 ## Architecture
@@ -163,7 +174,7 @@ show_evidence = true
 ```
 
 1. **Layer 1: Code Graph** — Tree-sitter AST parsing, dependency tracking via petgraph, cross-file impact analysis, graph caching with CozoDB
-2. **Layer 2: Domain Analyzers** — Regex-based pattern scanning for security, ML, infrastructure, and React anti-patterns
+2. **Layer 2: Domain Analyzers** — Regex-based pattern scanning for security, ML, infrastructure, React, and async anti-patterns
 3. **Layer 3: LLM Reasoning** — Deep analysis with `--ai` flag (coming soon)
 
 ## Development
