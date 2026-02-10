@@ -57,6 +57,9 @@ pub struct ModulesConfig {
     #[serde(default)]
     pub async_patterns: bool,
 
+    #[serde(default)]
+    pub dependency: bool,
+
     /// Module-specific configurations
     #[serde(flatten)]
     pub module_configs: HashMap<String, toml::Value>,
@@ -181,6 +184,7 @@ impl Default for ModulesConfig {
             infra: false,
             react: false,
             async_patterns: false,
+            dependency: false,
             module_configs: HashMap::new(),
         }
     }

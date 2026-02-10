@@ -167,6 +167,31 @@ const EXPLANATIONS: &[CategoryExplanation] = &[
         ],
     },
     CategoryExplanation {
+        prefix: "DEP",
+        name: "Dependency Hygiene",
+        description: "Import anti-patterns, deprecated modules, and manifest issues that \
+            pollute namespaces, break builds, or make dependencies opaque. Covers wildcard \
+            imports, circular dependency workarounds, unpinned versions, and git dependencies.",
+        why_it_matters: &[
+            "Wildcard imports pollute the namespace and make it impossible to trace where a name comes from",
+            "Deprecated module imports will break when upgrading to newer Python versions",
+            "Unpinned or wildcard dependency versions cause non-reproducible builds",
+            "Git dependencies break offline installs and are harder to audit for vulnerabilities",
+        ],
+        how_to_fix: &[
+            "Replace `from foo import *` with explicit imports: `from foo import bar, baz`",
+            "Replace deprecated modules with their modern equivalents (e.g. argparse instead of optparse)",
+            "Pin dependencies to specific versions or semver ranges in package.json",
+            "Publish packages to a registry instead of depending on git URLs",
+        ],
+        example_bad: r#"    from utils import *"#,
+        example_good: r#"    from utils import parse_config, validate_input"#,
+        references: &[
+            "PEP 8 Imports: https://peps.python.org/pep-0008/#imports",
+            "Python 3.12 Removals: https://docs.python.org/3/whatsnew/3.12.html#removed",
+        ],
+    },
+    CategoryExplanation {
         prefix: "IMPACT",
         name: "Change Impact",
         description: "Breaking or significant changes detected by comparing the current code \
@@ -346,7 +371,7 @@ mod tests {
     #[test]
     fn test_all_known_prefixes() {
         let known = [
-            "SEC", "SQL", "ML", "INFRA", "HOOKS", "ASYNC", "IMPACT", "PARSE",
+            "SEC", "SQL", "ML", "INFRA", "HOOKS", "ASYNC", "DEP", "IMPACT", "PARSE",
         ];
         for prefix in &known {
             assert!(
