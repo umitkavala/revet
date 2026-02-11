@@ -8,6 +8,7 @@ pub mod php;
 pub mod python;
 pub mod ruby;
 pub mod rust;
+pub mod swift;
 pub mod typescript;
 
 use crate::graph::{CodeGraph, NodeId};
@@ -79,6 +80,7 @@ impl ParserDispatcher {
                 Box::new(python::PythonParser::new()),
                 Box::new(ruby::RubyParser::new()),
                 Box::new(rust::RustParser::new()),
+                Box::new(swift::SwiftParser::new()),
                 Box::new(typescript::TypeScriptParser::new()),
             ],
         }
