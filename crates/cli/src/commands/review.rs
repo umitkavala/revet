@@ -3,10 +3,10 @@
 use anyhow::Result;
 use colored::Colorize;
 use revet_core::{
-    apply_fixes, create_store, discover_files, discover_files_extended, reconstruct_graph,
-    AnalyzerDispatcher, CodeGraph, DiffAnalyzer, Finding, GitTreeReader, GraphCache,
-    GraphCacheMeta, GraphStore, ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary,
-    Severity,
+    apply_fixes, create_store, discover_files, discover_files_extended, filter_findings,
+    reconstruct_graph, AnalyzerDispatcher, Baseline, CodeGraph, DiffAnalyzer, Finding,
+    GitTreeReader, GraphCache, GraphCacheMeta, GraphStore, ImpactAnalysis, ParserDispatcher,
+    RevetConfig, ReviewSummary, Severity,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -183,6 +183,16 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         }
     }
 
+    // ── 4d. Baseline suppression ───────────────────────────────────
+    let mut suppressed_count = 0usize;
+    if !cli.no_baseline {
+        if let Some(baseline) = Baseline::load(&repo_path)? {
+            let (new_findings, suppressed) = filter_findings(findings, &baseline, &repo_path);
+            findings = new_findings;
+            suppressed_count = suppressed;
+        }
+    }
+
     // ── 5. Save Cache (CozoStore + metadata) ─────────────────────
     let file_paths: Vec<PathBuf> = files
         .iter()
@@ -226,7 +236,9 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         Format::Json => print_json(&findings, &summary),
         Format::Sarif => print_sarif(&findings, &repo_path),
         Format::Github => print_github(&findings, &repo_path),
-        Format::Terminal => print_terminal(&findings, &summary, &repo_path, start),
+        Format::Terminal => {
+            print_terminal(&findings, &summary, &repo_path, start, suppressed_count)
+        }
     }
 
     let fail_on = cli.fail_on.as_deref().unwrap_or(&config.general.fail_on);
@@ -428,7 +440,13 @@ fn build_summary(
     summary
 }
 
-fn print_terminal(findings: &[Finding], summary: &ReviewSummary, repo_path: &Path, start: Instant) {
+fn print_terminal(
+    findings: &[Finding],
+    summary: &ReviewSummary,
+    repo_path: &Path,
+    start: Instant,
+    suppressed_count: usize,
+) {
     println!();
 
     // Print findings
@@ -458,6 +476,12 @@ fn print_terminal(findings: &[Finding], summary: &ReviewSummary, repo_path: &Pat
         format!("{} warning(s)", summary.warnings).yellow(),
         format!("{} info", summary.info).blue()
     );
+    if suppressed_count > 0 {
+        println!(
+            "  {}",
+            format!("{} baselined finding(s) suppressed", suppressed_count).dimmed()
+        );
+    }
     println!(
         "  {} files analyzed \u{00b7} {} nodes parsed",
         summary.files_analyzed, summary.nodes_parsed
