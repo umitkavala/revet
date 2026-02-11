@@ -17,6 +17,7 @@ pub mod fixer;
 pub mod graph;
 pub mod parser;
 pub mod store;
+pub mod suppress;
 
 pub use analyzer::{Analyzer, AnalyzerDispatcher};
 pub use baseline::{filter_findings, Baseline, BaselineEntry};
@@ -31,6 +32,7 @@ pub use fixer::{apply_fixes, FixReport};
 pub use graph::{CodeGraph, Edge, Node, NodeData, NodeId, NodeKind};
 pub use parser::{LanguageParser, ParseError, ParserDispatcher};
 pub use store::{reconstruct_graph, GraphStore, MemoryStore, StoreNodeId};
+pub use suppress::filter_findings_by_inline;
 
 #[cfg(feature = "cozo-store")]
 pub use store::{create_store, CozoStore};

@@ -192,6 +192,33 @@ const EXPLANATIONS: &[CategoryExplanation] = &[
         ],
     },
     CategoryExplanation {
+        prefix: "SUPPRESS",
+        name: "Inline Suppression",
+        description: "Inline comments that silence specific findings at the source location. \
+            Add a `revet-ignore` comment on the same line or the line before a finding to \
+            suppress it. Suppressed findings are excluded from output and do not count toward \
+            the --fail-on threshold.",
+        why_it_matters: &[
+            "Makes developer intent visible directly in the code (\"this is intentional\")",
+            "More granular than baseline snapshots — targets specific lines, not entire findings",
+            "Survives refactors better than line-number-based suppression in other tools",
+            "Uses stable prefixes (SEC, SQL, ML) instead of renumbered finding IDs",
+        ],
+        how_to_fix: &[
+            "Add `revet-ignore PREFIX` as a comment on the line before or same line as the finding",
+            "Use the finding prefix (SEC, SQL, ML, INFRA, etc.) — not the full ID like SEC-001",
+            "Use `revet-ignore *` to suppress all findings on that line",
+            "Combine prefixes with spaces: `revet-ignore SEC SQL` to suppress both categories",
+        ],
+        example_bad: r#"    password = "hardcoded123"  // triggers SEC finding"#,
+        example_good: r#"    // revet-ignore SEC
+    password = "hardcoded123"  // suppressed — intentional test fixture"#,
+        references: &[
+            "Similar: ESLint's eslint-disable-next-line",
+            "Similar: Rust's #[allow(clippy::...)]",
+        ],
+    },
+    CategoryExplanation {
         prefix: "IMPACT",
         name: "Change Impact",
         description: "Breaking or significant changes detected by comparing the current code \
@@ -371,7 +398,7 @@ mod tests {
     #[test]
     fn test_all_known_prefixes() {
         let known = [
-            "SEC", "SQL", "ML", "INFRA", "HOOKS", "ASYNC", "DEP", "IMPACT", "PARSE",
+            "SEC", "SQL", "ML", "INFRA", "HOOKS", "ASYNC", "DEP", "SUPPRESS", "IMPACT", "PARSE",
         ];
         for prefix in &known {
             assert!(

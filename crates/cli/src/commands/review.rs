@@ -4,9 +4,9 @@ use anyhow::Result;
 use colored::Colorize;
 use revet_core::{
     apply_fixes, create_store, discover_files, discover_files_extended, filter_findings,
-    reconstruct_graph, AnalyzerDispatcher, Baseline, CodeGraph, DiffAnalyzer, Finding,
-    GitTreeReader, GraphCache, GraphCacheMeta, GraphStore, ImpactAnalysis, ParserDispatcher,
-    RevetConfig, ReviewSummary, Severity,
+    filter_findings_by_inline, reconstruct_graph, AnalyzerDispatcher, Baseline, CodeGraph,
+    DiffAnalyzer, Finding, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore, ImpactAnalysis,
+    ParserDispatcher, RevetConfig, ReviewSummary, Severity,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -183,7 +183,11 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         }
     }
 
-    // ── 4d. Baseline suppression ───────────────────────────────────
+    // ── 4d. Inline suppression ───────────────────────────────────
+    let (new_findings, inline_suppressed) = filter_findings_by_inline(findings);
+    findings = new_findings;
+
+    // ── 4e. Baseline suppression ───────────────────────────────────
     let mut suppressed_count = 0usize;
     if !cli.no_baseline {
         if let Some(baseline) = Baseline::load(&repo_path)? {
@@ -236,9 +240,14 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         Format::Json => print_json(&findings, &summary),
         Format::Sarif => print_sarif(&findings, &repo_path),
         Format::Github => print_github(&findings, &repo_path),
-        Format::Terminal => {
-            print_terminal(&findings, &summary, &repo_path, start, suppressed_count)
-        }
+        Format::Terminal => print_terminal(
+            &findings,
+            &summary,
+            &repo_path,
+            start,
+            suppressed_count,
+            inline_suppressed,
+        ),
     }
 
     let fail_on = cli.fail_on.as_deref().unwrap_or(&config.general.fail_on);
@@ -446,6 +455,7 @@ fn print_terminal(
     repo_path: &Path,
     start: Instant,
     suppressed_count: usize,
+    inline_suppressed: usize,
 ) {
     println!();
 
@@ -476,10 +486,17 @@ fn print_terminal(
         format!("{} warning(s)", summary.warnings).yellow(),
         format!("{} info", summary.info).blue()
     );
-    if suppressed_count > 0 {
+    if suppressed_count > 0 || inline_suppressed > 0 {
+        let mut parts = Vec::new();
+        if suppressed_count > 0 {
+            parts.push(format!("{} baselined", suppressed_count));
+        }
+        if inline_suppressed > 0 {
+            parts.push(format!("{} inline", inline_suppressed));
+        }
         println!(
             "  {}",
-            format!("{} baselined finding(s) suppressed", suppressed_count).dimmed()
+            format!("{} finding(s) suppressed", parts.join(" + ")).dimmed()
         );
     }
     println!(
