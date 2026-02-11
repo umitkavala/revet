@@ -24,6 +24,7 @@ tree-sitter-rust = "0.23"
 tree-sitter-java = "0.23"
 tree-sitter-c-sharp = "0.23"
 tree-sitter-kotlin-ng = "1.1"
+tree-sitter-ruby = "0.23"
 petgraph = { version = "0.6", features = ["serde-1"] }
 git2 = "0.19"
 serde = { version = "1", features = ["derive"] }

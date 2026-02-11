@@ -22,6 +22,7 @@ tree-sitter-rust.workspace = true
 tree-sitter-java.workspace = true
 tree-sitter-c-sharp.workspace = true
 tree-sitter-kotlin-ng.workspace = true
+tree-sitter-ruby.workspace = true
 petgraph.workspace = true
 git2.workspace = true
 serde.workspace = true

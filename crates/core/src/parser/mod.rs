@@ -5,6 +5,7 @@ pub mod go;
 pub mod java;
 pub mod kotlin;
 pub mod python;
+pub mod ruby;
 pub mod rust;
 pub mod typescript;
 
@@ -74,6 +75,7 @@ impl ParserDispatcher {
                 Box::new(java::JavaParser::new()),
                 Box::new(kotlin::KotlinParser::new()),
                 Box::new(python::PythonParser::new()),
+                Box::new(ruby::RubyParser::new()),
                 Box::new(rust::RustParser::new()),
                 Box::new(typescript::TypeScriptParser::new()),
             ],
