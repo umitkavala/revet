@@ -1,0 +1,13 @@
+{
+  "name": "@revet/cli-win32-arm64",
+  "version": "0.1.0",
+  "description": "Revet CLI binary for Windows ARM64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/umitkavala/revet"
+  },
+  "os": ["win32"],
+  "cpu": ["arm64"],
+  "files": ["bin/"]
+}

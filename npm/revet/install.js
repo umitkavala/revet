@@ -7,6 +7,8 @@ const PLATFORMS = {
   "darwin-x64": "@revet/cli-darwin-x64",
   "linux-arm64": "@revet/cli-linux-arm64",
   "linux-x64": "@revet/cli-linux-x64",
+  "win32-x64": "@revet/cli-win32-x64",
+  "win32-arm64": "@revet/cli-win32-arm64",
 };
 
 const key = `${os.platform()}-${os.arch()}`;
@@ -21,7 +23,8 @@ if (!pkg) {
 }
 
 try {
-  require.resolve(`${pkg}/bin/revet`);
+  const binName = os.platform() === "win32" ? "revet.exe" : "revet";
+  require.resolve(`${pkg}/bin/${binName}`);
 } catch {
   console.warn(
     `warn: revet platform package ${pkg} not found.\n` +

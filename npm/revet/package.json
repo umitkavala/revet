@@ -24,7 +24,9 @@
     "@revet/cli-darwin-arm64": "0.1.0",
     "@revet/cli-darwin-x64": "0.1.0",
     "@revet/cli-linux-arm64": "0.1.0",
-    "@revet/cli-linux-x64": "0.1.0"
+    "@revet/cli-linux-x64": "0.1.0",
+    "@revet/cli-win32-x64": "0.1.0",
+    "@revet/cli-win32-arm64": "0.1.0"
   },
   "keywords": [
     "code-review",

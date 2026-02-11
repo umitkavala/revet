@@ -25,13 +25,21 @@ case "$TARGET" in
   x86_64-unknown-linux-gnu)
     NPM_DIR="cli-linux-x64"
     ;;
+  x86_64-pc-windows-msvc)
+    NPM_DIR="cli-win32-x64"
+    ;;
+  aarch64-pc-windows-msvc)
+    NPM_DIR="cli-win32-arm64"
+    ;;
   *)
     echo "Error: unsupported target $TARGET"
     echo "Supported targets:"
-    echo "  aarch64-apple-darwin     -> @revet/cli-darwin-arm64"
-    echo "  x86_64-apple-darwin      -> @revet/cli-darwin-x64"
+    echo "  aarch64-apple-darwin      -> @revet/cli-darwin-arm64"
+    echo "  x86_64-apple-darwin       -> @revet/cli-darwin-x64"
     echo "  aarch64-unknown-linux-gnu -> @revet/cli-linux-arm64"
     echo "  x86_64-unknown-linux-gnu  -> @revet/cli-linux-x64"
+    echo "  x86_64-pc-windows-msvc    -> @revet/cli-win32-x64"
+    echo "  aarch64-pc-windows-msvc   -> @revet/cli-win32-arm64"
     exit 1
     ;;
 esac
@@ -43,11 +51,20 @@ cargo build --release --bin revet --target "$TARGET"
 
 echo "Copying binary to $DEST..."
 mkdir -p "$DEST"
-cp "$REPO_ROOT/target/$TARGET/release/revet" "$DEST/revet"
-chmod +x "$DEST/revet"
+
+# Windows binaries have .exe extension
+case "$TARGET" in
+  *-windows-*)
+    cp "$REPO_ROOT/target/$TARGET/release/revet.exe" "$DEST/revet.exe"
+    ;;
+  *)
+    cp "$REPO_ROOT/target/$TARGET/release/revet" "$DEST/revet"
+    chmod +x "$DEST/revet"
+    ;;
+esac
 
 echo ""
-echo "Done! Binary placed at: $DEST/revet"
+echo "Done! Binary placed in: $DEST/"
 echo ""
 echo "Next steps:"
 echo "  cd $REPO_ROOT/npm/revet && npm pack    # Create tarball"
