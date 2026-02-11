@@ -184,7 +184,13 @@ impl CSharpParser {
         let mut base_classes = Vec::new();
         let mut decorators = Vec::new();
         let mut type_params = Vec::new();
-        extract_class_metadata(node, ctx.source, &mut base_classes, &mut decorators, &mut type_params);
+        extract_class_metadata(
+            node,
+            ctx.source,
+            &mut base_classes,
+            &mut decorators,
+            &mut type_params,
+        );
 
         // Extract body members
         let mut methods = Vec::new();
@@ -245,7 +251,13 @@ impl CSharpParser {
         let mut base_classes = Vec::new();
         let mut decorators = Vec::new();
         let mut type_params = Vec::new();
-        extract_class_metadata(node, ctx.source, &mut base_classes, &mut decorators, &mut type_params);
+        extract_class_metadata(
+            node,
+            ctx.source,
+            &mut base_classes,
+            &mut decorators,
+            &mut type_params,
+        );
 
         let mut methods = Vec::new();
         let mut fields = Vec::new();
@@ -709,9 +721,7 @@ impl CSharpParser {
                 } else {
                     // Fallback: find first identifier child
                     let mut vc = child.walk();
-                    let id_node = child
-                        .children(&mut vc)
-                        .find(|c| c.kind() == "identifier");
+                    let id_node = child.children(&mut vc).find(|c| c.kind() == "identifier");
                     id_node
                         .and_then(|c| c.utf8_text(ctx.source.as_bytes()).ok())
                         .map(|s| s.to_string())
@@ -943,7 +953,10 @@ fn extract_base_list(node: &tree_sitter::Node, source: &str, target: &mut Vec<St
 }
 
 /// Find the first child node with the given kind
-fn find_child_by_kind<'a>(node: &tree_sitter::Node<'a>, kind: &str) -> Option<tree_sitter::Node<'a>> {
+fn find_child_by_kind<'a>(
+    node: &tree_sitter::Node<'a>,
+    kind: &str,
+) -> Option<tree_sitter::Node<'a>> {
     let mut cursor = node.walk();
     let result = node.children(&mut cursor).find(|c| c.kind() == kind);
     result
@@ -1115,8 +1128,11 @@ fn find_enclosing_class_method(cursor: &TreeCursor, method_name: &str, source: &
         }
         let parent = temp_cursor.node();
         match parent.kind() {
-            "class_declaration" | "struct_declaration" | "enum_declaration"
-            | "record_declaration" | "record_struct_declaration" => {
+            "class_declaration"
+            | "struct_declaration"
+            | "enum_declaration"
+            | "record_declaration"
+            | "record_struct_declaration" => {
                 if let Some(class_name) = parent
                     .child_by_field_name("name")
                     .and_then(|n| n.utf8_text(source.as_bytes()).ok())
@@ -1152,8 +1168,11 @@ fn find_outer_class_name(cursor: &TreeCursor, source: &str) -> Option<String> {
         }
         let parent = temp.node();
         match parent.kind() {
-            "class_declaration" | "struct_declaration" | "enum_declaration"
-            | "record_declaration" | "record_struct_declaration" => {
+            "class_declaration"
+            | "struct_declaration"
+            | "enum_declaration"
+            | "record_declaration"
+            | "record_struct_declaration" => {
                 return parent
                     .child_by_field_name("name")
                     .and_then(|n| n.utf8_text(source.as_bytes()).ok())

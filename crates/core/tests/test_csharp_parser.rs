@@ -179,7 +179,10 @@ public struct Point {
         assert!(fields.contains(&"X".to_string()), "Expected field X");
         assert!(fields.contains(&"Y".to_string()), "Expected field Y");
         assert!(methods.contains(&"Distance".to_string()));
-        assert!(methods.contains(&"Point".to_string()), "Expected constructor");
+        assert!(
+            methods.contains(&"Point".to_string()),
+            "Expected constructor"
+        );
     } else {
         panic!("Expected Class data for Point struct");
     }
@@ -224,9 +227,7 @@ public interface IResizable : IDrawable {
     // IResizable should also have its method as a Function node
     let resizable_methods: Vec<_> = graph
         .nodes()
-        .filter(|(_, n)| {
-            matches!(n.kind(), NodeKind::Function) && n.name() == "IResizable.Resize"
-        })
+        .filter(|(_, n)| matches!(n.kind(), NodeKind::Function) && n.name() == "IResizable.Resize")
         .collect();
     assert_eq!(
         resizable_methods.len(),
@@ -390,10 +391,7 @@ public class Person {
         ctor_count >= 1,
         "Expected at least 1 constructor (may deduplicate)"
     );
-    assert!(
-        names.contains(&"Person.GetName"),
-        "Expected GetName method"
-    );
+    assert!(names.contains(&"Person.GetName"), "Expected GetName method");
 
     // Check constructor has no return type
     let ctors: Vec<_> = functions
@@ -453,7 +451,10 @@ public class Config {
         return_type,
     } = name_prop.1.data()
     {
-        assert!(parameters.is_empty(), "Properties should have no parameters");
+        assert!(
+            parameters.is_empty(),
+            "Properties should have no parameters"
+        );
         assert_eq!(return_type.as_deref(), Some("string"));
     } else {
         panic!("Expected Function data for Name property");
@@ -957,17 +958,13 @@ namespace MyApp {
 
     let mut node_counts = std::collections::HashMap::new();
     for (_, node) in graph.nodes() {
-        *node_counts
-            .entry(format!("{:?}", node.kind()))
-            .or_insert(0) += 1;
+        *node_counts.entry(format!("{:?}", node.kind())).or_insert(0) += 1;
     }
 
     let mut edge_counts = std::collections::HashMap::new();
     for (node_id, _) in graph.nodes() {
         for (_, edge) in graph.edges_from(node_id) {
-            *edge_counts
-                .entry(format!("{:?}", edge.kind()))
-                .or_insert(0) += 1;
+            *edge_counts.entry(format!("{:?}", edge.kind())).or_insert(0) += 1;
         }
     }
 
