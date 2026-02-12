@@ -5,6 +5,40 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
+/// A user-defined regex-based rule in `.revet.toml`
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomRule {
+    /// Optional human-readable identifier (e.g., "no-console-log")
+    #[serde(default)]
+    pub id: Option<String>,
+
+    /// Regex pattern (Rust `regex` crate syntax)
+    pub pattern: String,
+
+    /// Message shown when the pattern matches
+    pub message: String,
+
+    /// Severity: "error", "warning", or "info"
+    #[serde(default = "default_warning")]
+    pub severity: String,
+
+    /// Glob patterns for file matching (e.g., `["*.ts", "*.js"]`)
+    #[serde(default)]
+    pub paths: Vec<String>,
+
+    /// Optional fix suggestion shown to the user
+    #[serde(default)]
+    pub suggestion: Option<String>,
+
+    /// If the matched line contains this substring, skip it
+    #[serde(default)]
+    pub reject_if_contains: Option<String>,
+}
+
+fn default_warning() -> String {
+    "warning".to_string()
+}
+
 /// Main configuration structure for .revet.toml
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RevetConfig {
@@ -22,6 +56,10 @@ pub struct RevetConfig {
 
     #[serde(default)]
     pub output: OutputConfig,
+
+    /// User-defined custom rules
+    #[serde(default, rename = "rules")]
+    pub rules: Vec<CustomRule>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

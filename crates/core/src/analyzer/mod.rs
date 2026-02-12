@@ -5,6 +5,7 @@
 //! via `.revet.toml`.
 
 pub mod async_patterns;
+pub mod custom_rules;
 pub mod dependency;
 pub mod infra;
 pub mod ml_pipeline;
@@ -68,6 +69,16 @@ impl AnalyzerDispatcher {
                 Box::new(dependency::DependencyAnalyzer::new()),
             ],
         }
+    }
+
+    /// Create a dispatcher with built-in analyzers plus custom rules from config
+    pub fn new_with_config(config: &RevetConfig) -> Self {
+        let mut dispatcher = Self::new();
+        let custom = custom_rules::CustomRulesAnalyzer::from_config(config);
+        if custom.is_enabled(config) {
+            dispatcher.analyzers.push(Box::new(custom));
+        }
+        dispatcher
     }
 
     /// Collect extra file extensions needed by enabled analyzers.

@@ -219,6 +219,31 @@ const EXPLANATIONS: &[CategoryExplanation] = &[
         ],
     },
     CategoryExplanation {
+        prefix: "CUSTOM",
+        name: "Custom Rule",
+        description: "User-defined regex-based rules configured in `.revet.toml`. Teams can \
+            define project-specific patterns to catch banned APIs, coding conventions, sensitive \
+            keywords, or any other text pattern — without writing Rust code.",
+        why_it_matters: &[
+            "Enforces team-specific coding conventions automatically in CI",
+            "Catches project-specific anti-patterns that built-in analyzers don't cover",
+            "Zero setup beyond adding a [[rules]] entry to .revet.toml",
+            "Rules are version-controlled alongside the codebase they protect",
+        ],
+        how_to_fix: &[
+            "Read the custom rule's message and suggestion for project-specific guidance",
+            "If the match is a false positive, add `revet-ignore CUSTOM` on the line above",
+            "Adjust the rule's regex or add a `reject_if_contains` filter in .revet.toml",
+            "Remove the rule from .revet.toml if it is no longer needed",
+        ],
+        example_bad: r#"    console.log("debugging")  // matches [[rules]] pattern = 'console\.log'"#,
+        example_good: r#"    logger.info("debugging")  // uses approved logging utility"#,
+        references: &[
+            "Revet Config: https://github.com/umitkavala/revet#custom-rules",
+            "Rust regex syntax: https://docs.rs/regex/latest/regex/#syntax",
+        ],
+    },
+    CategoryExplanation {
         prefix: "IMPACT",
         name: "Change Impact",
         description: "Breaking or significant changes detected by comparing the current code \
@@ -398,7 +423,8 @@ mod tests {
     #[test]
     fn test_all_known_prefixes() {
         let known = [
-            "SEC", "SQL", "ML", "INFRA", "HOOKS", "ASYNC", "DEP", "SUPPRESS", "IMPACT", "PARSE",
+            "SEC", "SQL", "ML", "INFRA", "HOOKS", "ASYNC", "DEP", "CUSTOM", "SUPPRESS", "IMPACT",
+            "PARSE",
         ];
         for prefix in &known {
             assert!(
@@ -411,7 +437,7 @@ mod tests {
 
     #[test]
     fn test_unknown_prefix() {
-        assert!(get_explanation("CUSTOM").is_none());
+        assert!(get_explanation("FOOBAR").is_none());
         assert!(get_explanation("XYZ").is_none());
         assert!(get_explanation("").is_none());
     }

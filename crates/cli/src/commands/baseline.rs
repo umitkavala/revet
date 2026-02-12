@@ -35,7 +35,7 @@ pub fn run(path: Option<&Path>, clear: bool) -> Result<()> {
 
     // ── 2. File Discovery (always full scan for baseline) ────────
     let dispatcher = ParserDispatcher::new();
-    let analyzer_dispatcher = AnalyzerDispatcher::new();
+    let analyzer_dispatcher = AnalyzerDispatcher::new_with_config(&config);
     let extensions = dispatcher.supported_extensions();
 
     let extra_exts = analyzer_dispatcher.extra_extensions(&config);
