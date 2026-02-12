@@ -10,7 +10,7 @@ Revet is a developer-first code review agent that combines deterministic static 
 
 - **Not a GPT wrapper:** 80% of checks are deterministic (free, fast, reproducible)
 - **Cross-file impact analysis:** Detects breaking changes that affect other parts of your codebase
-- **Domain-specific intelligence:** Specialized modules for security, ML pipelines, infrastructure, React, and async patterns
+- **Domain-specific intelligence:** Specialized modules for security, ML pipelines, infrastructure, React, async patterns, and dependency hygiene — plus user-defined custom rules
 - **Offline-first:** All deterministic checks work without network access
 - **Code stays local:** LLMs receive structured context, not your source code
 
@@ -40,6 +40,7 @@ revet review --fix
 | `revet init` | Create a `.revet.toml` config file |
 | `revet review` | Review changes (diff-based or `--full`) |
 | `revet review --fix` | Apply auto-remediation to fixable findings |
+| `revet baseline` | Snapshot findings so future reviews only report new ones |
 | `revet explain <ID>` | Explain a finding (e.g. `revet explain SEC-001`) |
 
 ## Language Parsers
@@ -53,6 +54,11 @@ Revet uses [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) for fast, a
 | Go | `.go` | Functions, methods, structs, interfaces, goroutines |
 | Java | `.java` | Classes, interfaces, records, enums, nested classes |
 | Rust | `.rs` | Functions, structs, enums, traits, impl blocks |
+| C# | `.cs` | Classes, interfaces, records, structs, attributes, generics |
+| Kotlin | `.kt`, `.kts` | Classes, objects, data classes, annotations, sealed classes |
+| Ruby | `.rb`, `.rake`, `.gemspec` | Classes, modules, mixins, attr_accessors |
+| PHP | `.php` | Classes, traits, enums, namespaces, attributes |
+| Swift | `.swift` | Classes, structs, protocols, extensions, enums |
 
 ## Domain Analyzers
 
@@ -104,6 +110,52 @@ Detects async/await anti-patterns in JavaScript, TypeScript, and Python. Prefix:
 - Async timer callback (`setTimeout`/`setInterval`), floating Python coroutine (Warning)
 - Swallowed `.catch(() => {})`, redundant `return await` (Info)
 
+### Dependency Hygiene (`modules.dependency = true`, default: off)
+
+Detects import anti-patterns and manifest issues. Prefix: `DEP-`
+
+- Wildcard imports (Python/Java), deprecated Python module imports (Warning)
+- Circular import workarounds, unpinned dependency versions (Warning)
+- `require()` instead of ES import, deeply nested relative imports, git dependencies (Info)
+
+### Custom Rules
+
+Define project-specific regex rules directly in `.revet.toml` — no Rust code needed. Prefix: `CUSTOM-`
+
+```toml
+[[rules]]
+id = "no-console-log"
+pattern = 'console\.log'
+message = "console.log should not be used in production code"
+severity = "warning"
+paths = ["*.ts", "*.js", "*.tsx"]
+suggestion = "Use the logger utility instead"
+reject_if_contains = "// eslint-disable"
+```
+
+## Suppression
+
+### Inline Comments
+
+Silence specific findings with `revet-ignore` comments:
+
+```python
+# revet-ignore SEC
+password = "test-fixture"  # suppressed
+
+api_key = get_key()  # revet-ignore SEC SQL
+```
+
+### Baseline
+
+Snapshot current findings so future reviews only report new ones:
+
+```bash
+revet baseline          # create baseline
+revet review            # auto-filters baselined findings
+revet baseline --clear  # remove baseline
+```
+
 ## Output Formats
 
 ```bash
@@ -135,6 +187,7 @@ ml = true               # ML pipeline checks
 infra = false           # Infrastructure checks (Terraform, K8s, Docker)
 react = false           # React hooks checks
 async_patterns = false  # Async/await anti-pattern checks
+dependency = false      # Dependency hygiene checks
 
 [ignore]
 paths = ["vendor/", "node_modules/", "dist/"]
@@ -144,6 +197,15 @@ findings = ["SEC-003"]  # Suppress specific finding IDs
 format = "terminal"
 color = true
 show_evidence = true
+
+# Custom rules (zero or more)
+[[rules]]
+id = "no-console-log"
+pattern = 'console\.log'
+message = "console.log should not be used in production"
+severity = "warning"
+paths = ["*.ts", "*.js"]
+suggestion = "Use the logger utility instead"
 ```
 
 ## CI/CD
@@ -174,7 +236,7 @@ show_evidence = true
 ```
 
 1. **Layer 1: Code Graph** — Tree-sitter AST parsing, dependency tracking via petgraph, cross-file impact analysis, graph caching with CozoDB
-2. **Layer 2: Domain Analyzers** — Regex-based pattern scanning for security, ML, infrastructure, React, and async anti-patterns
+2. **Layer 2: Domain Analyzers** — Regex-based pattern scanning for security, ML, infrastructure, React, async, dependency, and user-defined custom rules
 3. **Layer 3: LLM Reasoning** — Deep analysis with `--ai` flag (coming soon)
 
 ## Development
