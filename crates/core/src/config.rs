@@ -33,6 +33,14 @@ pub struct CustomRule {
     /// If the matched line contains this substring, skip it
     #[serde(default)]
     pub reject_if_contains: Option<String>,
+
+    /// Regex pattern to find on the matched line (for auto-fix via `--fix`)
+    #[serde(default)]
+    pub fix_find: Option<String>,
+
+    /// Replacement string for `fix_find` (supports `$1`, `$2` backreferences)
+    #[serde(default)]
+    pub fix_replace: Option<String>,
 }
 
 fn default_warning() -> String {

@@ -19,6 +19,7 @@ struct CompiledRule {
     message: String,
     suggestion: Option<String>,
     reject_if_contains: Option<String>,
+    fix_kind: Option<FixKind>,
 }
 
 /// Analyzer that runs user-defined regex rules from `.revet.toml`
@@ -88,6 +89,28 @@ impl CustomRulesAnalyzer {
                 }
             };
 
+            // Determine fix kind from fix_find/fix_replace or suggestion
+            let fix_kind = match (&rule.fix_find, &rule.fix_replace) {
+                (Some(find), Some(replace)) => {
+                    // Validate the fix regex
+                    match Regex::new(find) {
+                        Ok(_) => Some(FixKind::ReplacePattern {
+                            find: find.clone(),
+                            replace: replace.clone(),
+                        }),
+                        Err(e) => {
+                            eprintln!(
+                                "  warn: invalid fix_find regex in custom rule {:?}: {}",
+                                rule.id.as_deref().unwrap_or(&rule.pattern),
+                                e
+                            );
+                            rule.suggestion.as_ref().map(|_| FixKind::Suggestion)
+                        }
+                    }
+                }
+                _ => rule.suggestion.as_ref().map(|_| FixKind::Suggestion),
+            };
+
             rules.push(CompiledRule {
                 regex,
                 globs,
@@ -95,6 +118,7 @@ impl CustomRulesAnalyzer {
                 message: rule.message.clone(),
                 suggestion: rule.suggestion.clone(),
                 reject_if_contains: rule.reject_if_contains.clone(),
+                fix_kind,
             });
         }
 
@@ -163,15 +187,13 @@ impl Analyzer for CustomRulesAnalyzer {
                         }
                     }
 
-                    let fix_kind = rule.suggestion.as_ref().map(|_| FixKind::Suggestion);
-
                     findings.push(make_finding(
                         rule.severity,
                         rule.message.clone(),
                         file.to_path_buf(),
                         line_num + 1,
                         rule.suggestion.clone(),
-                        fix_kind,
+                        rule.fix_kind.clone(),
                     ));
                     break; // One finding per line
                 }

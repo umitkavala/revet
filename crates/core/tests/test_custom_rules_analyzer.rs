@@ -481,6 +481,169 @@ paths = ["*.ts"]
     assert!(findings[0].id.starts_with("CUSTOM-"));
 }
 
+// ── fix_find / fix_replace ───────────────────────────────────────────────
+
+#[test]
+fn test_fix_replace_pattern() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(&dir, "app.ts", "console.log('hello');\n");
+
+    let config = config_from_toml(
+        r#"
+[modules]
+security = false
+ml = false
+
+[[rules]]
+pattern = 'console\.log'
+message = "Use logger instead"
+severity = "warning"
+paths = ["*.ts"]
+suggestion = "Replace console.log with logger.info"
+fix_find = 'console\.log\('
+fix_replace = 'logger.info('
+"#,
+    );
+
+    let findings = run_custom(&config, &[file.clone()], dir.path());
+    assert_eq!(findings.len(), 1);
+
+    // fix_kind should be ReplacePattern, not Suggestion
+    let fix = findings[0].fix_kind.as_ref().expect("should have fix_kind");
+    match fix {
+        revet_core::FixKind::ReplacePattern { find, replace } => {
+            assert_eq!(find, r"console\.log\(");
+            assert_eq!(replace, "logger.info(");
+        }
+        other => panic!("expected ReplacePattern, got {:?}", other),
+    }
+
+    // Actually apply the fix
+    revet_core::apply_fixes(&findings).expect("fix should succeed");
+    let fixed = std::fs::read_to_string(&file).unwrap();
+    assert_eq!(fixed, "logger.info('hello');\n");
+}
+
+#[test]
+fn test_fix_replace_applies_in_place() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "app.ts",
+        "console.log('a');\nlet x = 1;\nconsole.log('b');\n",
+    );
+
+    let config = config_from_toml(
+        r#"
+[modules]
+security = false
+ml = false
+
+[[rules]]
+pattern = 'console\.log'
+message = "Use logger"
+severity = "warning"
+paths = ["*.ts"]
+fix_find = 'console\.log'
+fix_replace = 'logger.info'
+"#,
+    );
+
+    let findings = run_custom(&config, &[file.clone()], dir.path());
+    assert_eq!(findings.len(), 2);
+
+    revet_core::apply_fixes(&findings).expect("fix should succeed");
+    let fixed = std::fs::read_to_string(&file).unwrap();
+    assert_eq!(fixed, "logger.info('a');\nlet x = 1;\nlogger.info('b');\n");
+}
+
+#[test]
+fn test_fix_find_without_fix_replace_falls_back_to_suggestion() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(&dir, "app.ts", "console.log('x');\n");
+
+    let config = config_from_toml(
+        r#"
+[[rules]]
+pattern = 'console\.log'
+message = "No console.log"
+severity = "warning"
+paths = ["*.ts"]
+suggestion = "Use logger"
+fix_find = 'console\.log'
+"#,
+    );
+
+    let findings = run_custom(&config, &[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    // Should fall back to Suggestion since fix_replace is missing
+    match findings[0].fix_kind.as_ref() {
+        Some(revet_core::FixKind::Suggestion) => {}
+        other => panic!("expected Suggestion, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_invalid_fix_find_regex_falls_back_to_suggestion() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(&dir, "app.ts", "console.log('x');\n");
+
+    let config = config_from_toml(
+        r#"
+[[rules]]
+pattern = 'console\.log'
+message = "No console.log"
+severity = "warning"
+paths = ["*.ts"]
+suggestion = "Use logger"
+fix_find = '[invalid'
+fix_replace = 'logger'
+"#,
+    );
+
+    let findings = run_custom(&config, &[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    // Should fall back to Suggestion since fix_find regex is invalid
+    match findings[0].fix_kind.as_ref() {
+        Some(revet_core::FixKind::Suggestion) => {}
+        other => panic!("expected Suggestion fallback, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_fix_replace_without_suggestion() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(&dir, "app.ts", "console.log('x');\n");
+
+    let config = config_from_toml(
+        r#"
+[modules]
+security = false
+ml = false
+
+[[rules]]
+pattern = 'console\.log'
+message = "Use logger"
+severity = "warning"
+paths = ["*.ts"]
+fix_find = 'console\.log'
+fix_replace = 'logger.info'
+"#,
+    );
+
+    let findings = run_custom(&config, &[file.clone()], dir.path());
+    assert_eq!(findings.len(), 1);
+    // fix_kind should still be ReplacePattern even without suggestion
+    assert!(matches!(
+        findings[0].fix_kind,
+        Some(revet_core::FixKind::ReplacePattern { .. })
+    ));
+
+    revet_core::apply_fixes(&findings).expect("fix should succeed");
+    let fixed = std::fs::read_to_string(&file).unwrap();
+    assert_eq!(fixed, "logger.info('x');\n");
+}
+
 // ── Coexists with built-in analyzers ────────────────────────────────────
 
 #[test]

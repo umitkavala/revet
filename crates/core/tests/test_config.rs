@@ -65,3 +65,39 @@ fn test_default_config_has_no_rules() {
     let config = RevetConfig::default();
     assert!(config.rules.is_empty());
 }
+
+#[test]
+fn test_parse_custom_rules_with_fix() {
+    let toml_str = r#"
+[[rules]]
+pattern = 'console\.log'
+message = "Use logger"
+severity = "warning"
+paths = ["*.ts"]
+suggestion = "Replace console.log with logger.info"
+fix_find = 'console\.log\('
+fix_replace = 'logger.info('
+"#;
+
+    let config: RevetConfig = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.rules.len(), 1);
+
+    let r = &config.rules[0];
+    assert_eq!(r.fix_find.as_deref(), Some(r"console\.log\("));
+    assert_eq!(r.fix_replace.as_deref(), Some("logger.info("));
+}
+
+#[test]
+fn test_parse_custom_rules_fix_fields_optional() {
+    let toml_str = r#"
+[[rules]]
+pattern = 'TODO'
+message = "Unresolved TODO"
+severity = "info"
+"#;
+
+    let config: RevetConfig = toml::from_str(toml_str).unwrap();
+    let r = &config.rules[0];
+    assert!(r.fix_find.is_none());
+    assert!(r.fix_replace.is_none());
+}

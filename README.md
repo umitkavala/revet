@@ -131,7 +131,11 @@ severity = "warning"
 paths = ["*.ts", "*.js", "*.tsx"]
 suggestion = "Use the logger utility instead"
 reject_if_contains = "// eslint-disable"
+fix_find = 'console\.log\('       # regex to find on matched line
+fix_replace = 'logger.info('      # replacement (applied by --fix)
 ```
+
+When `fix_find` and `fix_replace` are both set, `revet review --fix` will auto-replace the pattern in-place. Without them, findings show the `suggestion` text only.
 
 ## Suppression
 
