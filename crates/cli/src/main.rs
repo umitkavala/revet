@@ -78,6 +78,12 @@ enum Commands {
         path: Option<PathBuf>,
     },
 
+    /// Show findings only on changed lines
+    Diff {
+        /// Base branch or commit to diff against
+        base: String,
+    },
+
     /// Snapshot current findings as a baseline
     Baseline {
         /// Path to repository (default: current directory)
@@ -109,6 +115,12 @@ fn main() -> Result<()> {
         }
         Some(Commands::Review { ref path }) => {
             let exit_code = commands::review::run(path.as_deref(), &cli)?;
+            if exit_code == commands::review::ReviewExitCode::FindingsExceedThreshold {
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Diff { ref base }) => {
+            let exit_code = commands::diff::run(base, &cli)?;
             if exit_code == commands::review::ReviewExitCode::FindingsExceedThreshold {
                 std::process::exit(1);
             }

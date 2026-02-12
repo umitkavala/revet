@@ -24,7 +24,8 @@ pub use baseline::{filter_findings, Baseline, BaselineEntry};
 pub use cache::{GraphCache, GraphCacheMeta};
 pub use config::RevetConfig;
 pub use diff::{
-    ChangeClassification, ChangeImpact, DiffAnalyzer, GitTreeReader, ImpactAnalysis, ImpactSummary,
+    filter_findings_by_diff, ChangeClassification, ChangeImpact, DiffAnalyzer, DiffFileLines,
+    DiffLineMap, GitTreeReader, ImpactAnalysis, ImpactSummary,
 };
 pub use discovery::{discover_files, discover_files_extended};
 pub use finding::{Finding, FixKind, ReviewSummary, Severity};

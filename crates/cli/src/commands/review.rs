@@ -304,14 +304,14 @@ fn load_old_graph(
 }
 
 #[derive(Debug, Clone, Copy)]
-enum Format {
+pub(crate) enum Format {
     Terminal,
     Json,
     Sarif,
     Github,
 }
 
-fn resolve_format(cli: &crate::Cli, config: &RevetConfig) -> Format {
+pub(crate) fn resolve_format(cli: &crate::Cli, config: &RevetConfig) -> Format {
     if let Some(ref f) = cli.format {
         return match f {
             crate::OutputFormat::Json => Format::Json,
@@ -410,7 +410,7 @@ fn full_scan(
     Ok(files)
 }
 
-fn has_extension(path: &Path, extensions: &[&str]) -> bool {
+pub(crate) fn has_extension(path: &Path, extensions: &[&str]) -> bool {
     let ext = match path.extension().and_then(|e| e.to_str()) {
         Some(e) => e,
         None => return false,
@@ -419,7 +419,7 @@ fn has_extension(path: &Path, extensions: &[&str]) -> bool {
     extensions.contains(&with_dot.as_str())
 }
 
-fn has_filename(path: &Path, filenames: &[&str]) -> bool {
+pub(crate) fn has_filename(path: &Path, filenames: &[&str]) -> bool {
     if filenames.is_empty() {
         return false;
     }
@@ -429,7 +429,7 @@ fn has_filename(path: &Path, filenames: &[&str]) -> bool {
     }
 }
 
-fn build_summary(
+pub(crate) fn build_summary(
     findings: &[Finding],
     files_analyzed: usize,
     nodes_parsed: usize,
@@ -449,7 +449,7 @@ fn build_summary(
     summary
 }
 
-fn print_terminal(
+pub(crate) fn print_terminal(
     findings: &[Finding],
     summary: &ReviewSummary,
     repo_path: &Path,
@@ -506,7 +506,7 @@ fn print_terminal(
     println!("  Time: {:.1}s", start.elapsed().as_secs_f64());
 }
 
-fn print_json(findings: &[Finding], summary: &ReviewSummary) {
+pub(crate) fn print_json(findings: &[Finding], summary: &ReviewSummary) {
     let json_findings: Vec<output::json::JsonFinding> = findings
         .iter()
         .map(|f| output::json::JsonFinding {
@@ -533,7 +533,7 @@ fn print_json(findings: &[Finding], summary: &ReviewSummary) {
     }
 }
 
-fn print_sarif(findings: &[Finding], repo_path: &Path) {
+pub(crate) fn print_sarif(findings: &[Finding], repo_path: &Path) {
     let log = output::sarif::build_sarif_log(findings, repo_path);
     match serde_json::to_string_pretty(&log) {
         Ok(json) => println!("{}", json),
@@ -541,7 +541,7 @@ fn print_sarif(findings: &[Finding], repo_path: &Path) {
     }
 }
 
-fn print_no_files(format: Format, start: Instant) {
+pub(crate) fn print_no_files(format: Format, start: Instant) {
     match format {
         Format::Json => {
             let out = output::json::JsonOutput {
@@ -572,7 +572,7 @@ fn print_no_files(format: Format, start: Instant) {
     }
 }
 
-fn print_github(findings: &[Finding], repo_path: &Path) {
+pub(crate) fn print_github(findings: &[Finding], repo_path: &Path) {
     for f in findings {
         println!("{}", output::github::format_finding(f, repo_path));
     }
