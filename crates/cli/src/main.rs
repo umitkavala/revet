@@ -93,6 +93,20 @@ enum Commands {
         #[arg(long)]
         clear: bool,
     },
+
+    /// Watch for file changes and analyze continuously
+    Watch {
+        /// Path to repository (default: current directory)
+        path: Option<PathBuf>,
+
+        /// Debounce duration in milliseconds
+        #[arg(long, default_value = "300")]
+        debounce: u64,
+
+        /// Don't clear screen between runs
+        #[arg(long)]
+        no_clear: bool,
+    },
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -127,6 +141,13 @@ fn main() -> Result<()> {
         }
         Some(Commands::Baseline { ref path, clear }) => {
             commands::baseline::run(path.as_deref(), clear)?;
+        }
+        Some(Commands::Watch {
+            ref path,
+            debounce,
+            no_clear,
+        }) => {
+            commands::watch::run(path.as_deref(), &cli, debounce, no_clear)?;
         }
         None => {
             let exit_code = commands::review::run(None, &cli)?;

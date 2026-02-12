@@ -40,7 +40,9 @@ revet review --fix
 | `revet init` | Create a `.revet.toml` config file |
 | `revet review` | Review changes (diff-based or `--full`) |
 | `revet review --fix` | Apply auto-remediation to fixable findings |
+| `revet diff <base>` | Show findings only on **changed lines** vs a branch/commit |
 | `revet baseline` | Snapshot findings so future reviews only report new ones |
+| `revet watch` | Watch for file changes and analyze continuously |
 | `revet explain <ID>` | Explain a finding (e.g. `revet explain SEC-001`) |
 
 ## Language Parsers
@@ -159,6 +161,33 @@ revet baseline          # create baseline
 revet review            # auto-filters baselined findings
 revet baseline --clear  # remove baseline
 ```
+
+## Diff Mode
+
+Show findings **only on changed lines** — perfect for PRs and focused reviews:
+
+```bash
+revet diff main              # findings only on lines changed vs main
+revet diff feature/auth      # vs a specific branch
+revet diff main --fix        # with auto-fix
+revet diff main --format json # any output format
+```
+
+Unlike `revet review` (which shows all findings in changed files), `revet diff` filters down to the exact lines that were added or modified. New files show all findings. Deleted files are excluded.
+
+## Watch Mode
+
+Continuous feedback loop — save a file, instantly see findings:
+
+```bash
+revet watch                     # watch current directory, clear screen between runs
+revet watch --no-clear          # log-style: accumulate output
+revet watch --debounce 500      # custom debounce in ms (default: 300)
+revet watch --fix               # apply auto-fixes on each save
+revet watch --format json       # any output format
+```
+
+Runs a full scan on startup and re-analyzes whenever a supported file changes. Config changes in `.revet.toml` are picked up automatically on the next run. Press **Ctrl-C** to stop.
 
 ## Output Formats
 

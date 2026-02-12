@@ -5,3 +5,4 @@ pub mod diff;
 pub mod explain;
 pub mod init;
 pub mod review;
+pub mod watch;

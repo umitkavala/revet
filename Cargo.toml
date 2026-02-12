@@ -43,6 +43,9 @@ anyhow = "1"
 thiserror = "2"
 indicatif = "0.17"
 cozo-ce = { version = "0.7", default-features = false, features = ["minimal", "rayon", "requests"] }
+notify = "6.1"
+notify-debouncer-mini = "0.4"
+ctrlc = "3.4"
 
 [profile.release]
 lto = true
