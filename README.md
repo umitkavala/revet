@@ -241,6 +241,25 @@ paths = ["*.ts", "*.js"]
 suggestion = "Use the logger utility instead"
 ```
 
+## Authentication
+
+Revet works fully offline with the **Free** tier. For Pro and Team features:
+
+| Command | Description |
+|---------|-------------|
+| `revet auth` | Open browser to sign in |
+| `revet auth --key <KEY>` | Set license key manually |
+| `revet auth status` | Show current tier and features |
+| `revet auth logout` | Remove stored credentials |
+
+**Free tier** includes: code graph, cross-file impact analysis, basic security (secret exposure + SQL injection), and all output formats.
+
+**Pro tier** adds: `--fix` auto-remediation, ML/infra/react/async/dependency modules, and `explain`.
+
+**Team tier** adds: shared config, GitHub Action PR comments, and dashboard.
+
+License is cached locally at `~/.config/revet/license.json` (24h TTL). When the API is unreachable, the cached license is used as a grace period.
+
 ## CI/CD
 
 ### GitHub Actions

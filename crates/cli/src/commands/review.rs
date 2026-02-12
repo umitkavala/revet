@@ -11,6 +11,7 @@ use revet_core::{
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
+use crate::license::{self, License};
 use crate::output;
 
 /// Exit status from the review command
@@ -22,7 +23,7 @@ pub enum ReviewExitCode {
     FindingsExceedThreshold,
 }
 
-pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
+pub fn run(path: Option<&Path>, cli: &crate::Cli, lic: &License) -> Result<ReviewExitCode> {
     let start = Instant::now();
     let repo_path = path.unwrap_or_else(|| Path::new("."));
     let repo_path = std::fs::canonicalize(repo_path).unwrap_or_else(|_| repo_path.to_path_buf());
@@ -34,7 +35,8 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     eprintln!();
 
     // ── 1. Config ────────────────────────────────────────────────
-    let config = RevetConfig::find_and_load(&repo_path)?;
+    let mut config = RevetConfig::find_and_load(&repo_path)?;
+    license::gate::apply_license_gates(&mut config, lic);
     let format = resolve_format(cli, &config);
 
     // ── 2. File Discovery ────────────────────────────────────────
@@ -170,7 +172,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     );
 
     // ── 4c. Apply fixes ───────────────────────────────────────────
-    if cli.fix {
+    if cli.fix && license::gate::check_and_warn("auto_fix", "--fix", lic) {
         eprint!("  Applying fixes... ");
         match apply_fixes(&findings) {
             Ok(report) => eprintln!(

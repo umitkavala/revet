@@ -12,12 +12,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::license::{self, License};
+
 use super::review::{
     build_summary, has_extension, has_filename, print_github, print_json, print_no_files,
     print_sarif, print_terminal, resolve_format, Format,
 };
 
-pub fn run(path: Option<&Path>, cli: &crate::Cli, debounce_ms: u64, no_clear: bool) -> Result<()> {
+pub fn run(
+    path: Option<&Path>,
+    cli: &crate::Cli,
+    debounce_ms: u64,
+    no_clear: bool,
+    lic: &License,
+) -> Result<()> {
     let repo_path = path.unwrap_or_else(|| Path::new("."));
     let repo_path = std::fs::canonicalize(repo_path).unwrap_or_else(|_| repo_path.to_path_buf());
 
@@ -28,7 +36,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli, debounce_ms: u64, no_clear: bo
     eprintln!();
 
     // ── Initial run ────────────────────────────────────────────
-    run_analysis(&repo_path, cli)?;
+    run_analysis(&repo_path, cli, lic)?;
     eprintln!();
     eprintln!("  {}", "Watching for changes... (Ctrl-C to stop)".dimmed());
 
@@ -89,7 +97,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli, debounce_ms: u64, no_clear: bo
                         eprintln!();
                     }
 
-                    match run_analysis(&repo_path, cli) {
+                    match run_analysis(&repo_path, cli, lic) {
                         Ok(_) => {}
                         Err(e) => {
                             eprintln!("  {}: {}", "analysis error".red(), e);
@@ -116,17 +124,18 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli, debounce_ms: u64, no_clear: bo
     Ok(())
 }
 
-fn run_analysis(repo_path: &Path, cli: &crate::Cli) -> Result<()> {
+fn run_analysis(repo_path: &Path, cli: &crate::Cli, lic: &License) -> Result<()> {
     let start = Instant::now();
 
     // ── 1. Config (re-load each run) ──────────────────────────
-    let config = match RevetConfig::find_and_load(repo_path) {
+    let mut config = match RevetConfig::find_and_load(repo_path) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("  {}: {}", "config error".red(), e);
             RevetConfig::default()
         }
     };
+    license::gate::apply_license_gates(&mut config, lic);
     let format = resolve_format(cli, &config);
 
     // ── 2. File discovery (full scan) ─────────────────────────
@@ -208,7 +217,7 @@ fn run_analysis(repo_path: &Path, cli: &crate::Cli) -> Result<()> {
     );
 
     // ── 5. Apply fixes ────────────────────────────────────────
-    if cli.fix {
+    if cli.fix && license::gate::check_and_warn("auto_fix", "--fix", lic) {
         eprint!("  Applying fixes... ");
         match apply_fixes(&findings) {
             Ok(report) => eprintln!(
