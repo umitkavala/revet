@@ -1,5 +1,5 @@
 use revet_core::finding::{Finding, Severity};
-use revet_core::suppress::{filter_findings_by_inline, parse_suppressions};
+use revet_core::suppress::{filter_findings_by_inline, matches_suppression, parse_suppressions};
 use std::io::Write;
 use std::path::PathBuf;
 use tempfile::NamedTempFile;
@@ -211,4 +211,30 @@ fn test_mixed_suppressed_and_kept() {
     assert_eq!(suppressed, 1);
     assert_eq!(kept.len(), 1);
     assert_eq!(kept[0].id, "SEC-002");
+}
+
+// ── matches_suppression (unit tests) ─────────────────────────
+
+#[test]
+fn test_matches_suppression_exact_prefix() {
+    let prefixes = vec!["SEC".to_string()];
+    assert!(matches_suppression("SEC-001", &prefixes));
+    assert!(matches_suppression("SEC-999", &prefixes));
+    assert!(!matches_suppression("SQL-001", &prefixes));
+}
+
+#[test]
+fn test_matches_suppression_wildcard() {
+    let prefixes = vec!["*".to_string()];
+    assert!(matches_suppression("SEC-001", &prefixes));
+    assert!(matches_suppression("SQL-001", &prefixes));
+    assert!(matches_suppression("ML-042", &prefixes));
+}
+
+#[test]
+fn test_matches_suppression_multiple_prefixes() {
+    let prefixes = vec!["SEC".to_string(), "SQL".to_string()];
+    assert!(matches_suppression("SEC-001", &prefixes));
+    assert!(matches_suppression("SQL-001", &prefixes));
+    assert!(!matches_suppression("ML-001", &prefixes));
 }

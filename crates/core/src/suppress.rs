@@ -30,7 +30,7 @@ pub fn parse_suppressions(content: &str) -> HashMap<usize, Vec<String>> {
 ///
 /// - `*` matches everything
 /// - `SEC` matches `SEC-001`, `SEC-002`, etc.
-fn matches_suppression(finding_id: &str, prefixes: &[String]) -> bool {
+pub fn matches_suppression(finding_id: &str, prefixes: &[String]) -> bool {
     let finding_prefix = finding_id.split('-').next().unwrap_or(finding_id);
     prefixes.iter().any(|p| p == "*" || p == finding_prefix)
 }
@@ -93,49 +93,4 @@ pub fn filter_findings_by_inline(findings: Vec<Finding>) -> (Vec<Finding>, usize
     }
 
     (kept, suppressed)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_single_prefix() {
-        let sups = parse_suppressions("# revet-ignore SEC\npassword = 'abc'");
-        assert_eq!(sups.get(&1).unwrap(), &["SEC"]);
-        assert!(!sups.contains_key(&2));
-    }
-
-    #[test]
-    fn test_parse_multiple_prefixes() {
-        let sups = parse_suppressions("// revet-ignore SEC SQL");
-        assert_eq!(sups.get(&1).unwrap(), &["SEC", "SQL"]);
-    }
-
-    #[test]
-    fn test_parse_wildcard() {
-        let sups = parse_suppressions("# revet-ignore *");
-        assert_eq!(sups.get(&1).unwrap(), &["*"]);
-    }
-
-    #[test]
-    fn test_matches_suppression_prefix() {
-        assert!(matches_suppression("SEC-001", &["SEC".into()]));
-        assert!(matches_suppression("SEC-042", &["SEC".into()]));
-        assert!(!matches_suppression("SQL-001", &["SEC".into()]));
-    }
-
-    #[test]
-    fn test_matches_suppression_wildcard() {
-        assert!(matches_suppression("SEC-001", &["*".into()]));
-        assert!(matches_suppression("ML-001", &["*".into()]));
-    }
-
-    #[test]
-    fn test_matches_suppression_multiple() {
-        let prefixes = vec!["SEC".into(), "SQL".into()];
-        assert!(matches_suppression("SEC-001", &prefixes));
-        assert!(matches_suppression("SQL-003", &prefixes));
-        assert!(!matches_suppression("ML-001", &prefixes));
-    }
 }

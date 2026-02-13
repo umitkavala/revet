@@ -7,6 +7,10 @@ license.workspace = true
 repository.workspace = true
 description = "Code review agent with deterministic analysis and selective LLM reasoning"
 
+[lib]
+name = "revet_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "revet"
 path = "src/main.rs"
