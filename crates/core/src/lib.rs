@@ -33,7 +33,7 @@ pub use fixer::{apply_fixes, FixReport};
 pub use graph::{CodeGraph, Edge, MergeMap, Node, NodeData, NodeId, NodeKind};
 pub use parser::{LanguageParser, ParseError, ParserDispatcher};
 pub use store::{reconstruct_graph, GraphStore, MemoryStore, StoreNodeId};
-pub use suppress::filter_findings_by_inline;
+pub use suppress::{filter_findings_by_inline, matches_suppression, parse_suppressions};
 
 #[cfg(feature = "cozo-store")]
 pub use store::{create_store, CozoStore};

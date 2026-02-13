@@ -5,7 +5,7 @@ use colored::Colorize;
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use revet_core::{
     apply_fixes, discover_files_extended, filter_findings, filter_findings_by_inline,
-    AnalyzerDispatcher, Baseline, CodeGraph, Finding, ParserDispatcher, RevetConfig, Severity,
+    AnalyzerDispatcher, Baseline, Finding, ParserDispatcher, RevetConfig, Severity,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -166,18 +166,11 @@ fn run_analysis(repo_path: &Path, cli: &crate::Cli, lic: &License) -> Result<()>
         return Ok(());
     }
 
-    // ── 3. Parse ──────────────────────────────────────────────
+    // ── 3. Parse (parallel) ────────────────────────────────────
     eprint!("  Building code graph... ");
     let graph_start = Instant::now();
-    let mut graph = CodeGraph::new(repo_path.to_path_buf());
-    let mut parse_errors: Vec<String> = Vec::new();
 
-    for file in &files {
-        match dispatcher.parse_file(file, &mut graph) {
-            Ok(_) => {}
-            Err(e) => parse_errors.push(format!("{}: {}", file.display(), e)),
-        }
-    }
+    let (graph, parse_errors) = dispatcher.parse_files_parallel(&files, repo_path.to_path_buf());
 
     let node_count: usize = graph.nodes().count();
     eprintln!(
@@ -206,7 +199,7 @@ fn run_analysis(repo_path: &Path, cli: &crate::Cli, lic: &License) -> Result<()>
 
     eprint!("  Running domain analyzers... ");
     let analyzer_start = Instant::now();
-    let analyzer_findings = analyzer_dispatcher.run_all(&files, repo_path, &config);
+    let analyzer_findings = analyzer_dispatcher.run_all_parallel(&files, repo_path, &config);
     let analyzer_count = analyzer_findings.len();
     findings.extend(analyzer_findings);
     eprintln!(

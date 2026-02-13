@@ -4,8 +4,7 @@ use anyhow::Result;
 use colored::Colorize;
 use revet_core::{
     apply_fixes, filter_findings, filter_findings_by_diff, filter_findings_by_inline,
-    AnalyzerDispatcher, Baseline, CodeGraph, DiffAnalyzer, Finding, ParserDispatcher, RevetConfig,
-    Severity,
+    AnalyzerDispatcher, Baseline, DiffAnalyzer, Finding, ParserDispatcher, RevetConfig, Severity,
 };
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -98,19 +97,11 @@ pub fn run(base: &str, cli: &crate::Cli, lic: &License) -> Result<ReviewExitCode
         changed_line_count
     );
 
-    // ── 4. Parse ─────────────────────────────────────────────────
+    // ── 4. Parse (parallel) ────────────────────────────────────
     eprint!("  Building code graph... ");
     let graph_start = Instant::now();
 
-    let mut graph = CodeGraph::new(repo_path.clone());
-    let mut parse_errors: Vec<String> = Vec::new();
-
-    for file in &files {
-        match dispatcher.parse_file(file, &mut graph) {
-            Ok(_) => {}
-            Err(e) => parse_errors.push(format!("{}: {}", file.display(), e)),
-        }
-    }
+    let (graph, parse_errors) = dispatcher.parse_files_parallel(&files, repo_path.clone());
 
     let node_count: usize = graph.nodes().count();
     eprintln!(
@@ -140,7 +131,7 @@ pub fn run(base: &str, cli: &crate::Cli, lic: &License) -> Result<ReviewExitCode
 
     eprint!("  Running domain analyzers... ");
     let analyzer_start = Instant::now();
-    let analyzer_findings = analyzer_dispatcher.run_all(&files, &repo_path, &config);
+    let analyzer_findings = analyzer_dispatcher.run_all_parallel(&files, &repo_path, &config);
     let analyzer_count = analyzer_findings.len();
     findings.extend(analyzer_findings);
     eprintln!(

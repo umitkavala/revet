@@ -161,3 +161,78 @@ fn test_transitive_dependents() {
     assert!(dependents.contains(&node_b));
     assert!(dependents.contains(&node_c));
 }
+
+// ── Merge tests ─────────────────────────────────────────────────
+
+#[test]
+fn test_merge_basic() {
+    let mut a = CodeGraph::new(PathBuf::from("/root"));
+    a.add_node(Node::new(
+        NodeKind::Function,
+        "func_a".to_string(),
+        PathBuf::from("a.py"),
+        1,
+        NodeData::Function {
+            parameters: vec![],
+            return_type: None,
+        },
+    ));
+
+    let mut b = CodeGraph::new(PathBuf::from("/root"));
+    b.add_node(Node::new(
+        NodeKind::Function,
+        "func_b".to_string(),
+        PathBuf::from("b.py"),
+        1,
+        NodeData::Function {
+            parameters: vec![],
+            return_type: None,
+        },
+    ));
+
+    let map = a.merge(b);
+    assert_eq!(map.len(), 1);
+    assert_eq!(a.nodes().count(), 2);
+}
+
+#[test]
+fn test_merge_edges_integrity() {
+    let mut main = CodeGraph::new(PathBuf::from("/root"));
+
+    let mut sub = CodeGraph::new(PathBuf::from("/root"));
+    let s1 = sub.add_node(Node::new(
+        NodeKind::Function,
+        "caller".to_string(),
+        PathBuf::from("x.py"),
+        1,
+        NodeData::Function {
+            parameters: vec![],
+            return_type: None,
+        },
+    ));
+    let s2 = sub.add_node(Node::new(
+        NodeKind::Function,
+        "callee".to_string(),
+        PathBuf::from("x.py"),
+        10,
+        NodeData::Function {
+            parameters: vec![],
+            return_type: None,
+        },
+    ));
+    sub.add_edge(s1, s2, Edge::new(EdgeKind::Calls));
+
+    let map = main.merge(sub);
+
+    // Verify the edge was remapped correctly
+    let new_caller = map[&s1];
+    let edges: Vec<_> = main.edges_from(new_caller).collect();
+    assert_eq!(edges.len(), 1);
+    assert_eq!(edges[0].0, map[&s2]);
+
+    // Query should work on merged graph
+    let query = main.query();
+    let deps = query.direct_dependents(map[&s2]);
+    assert_eq!(deps.len(), 1);
+    assert_eq!(deps[0], map[&s1]);
+}
