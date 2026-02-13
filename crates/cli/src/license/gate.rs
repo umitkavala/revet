@@ -75,14 +75,11 @@ pub fn apply_license_gates(config: &mut RevetConfig, license: &License) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::license::types::{
-        Tier, FREE_FEATURES, PRO_FEATURES, TEAM_FEATURES,
-    };
+    use crate::license::types::{Tier, FREE_FEATURES, PRO_FEATURES, TEAM_FEATURES};
     use std::collections::HashSet;
 
     fn make_license(tier: Tier) -> License {
-        let mut features: HashSet<String> =
-            FREE_FEATURES.iter().map(|s| s.to_string()).collect();
+        let mut features: HashSet<String> = FREE_FEATURES.iter().map(|s| s.to_string()).collect();
         if matches!(tier, Tier::Pro | Tier::Team) {
             features.extend(PRO_FEATURES.iter().map(|s| s.to_string()));
         }
@@ -123,8 +120,14 @@ mod tests {
         assert!(!config.modules.ml, "ml should be gated on Free");
         assert!(!config.modules.infra, "infra should be gated on Free");
         assert!(!config.modules.react, "react should be gated on Free");
-        assert!(!config.modules.async_patterns, "async should be gated on Free");
-        assert!(!config.modules.dependency, "dependency should be gated on Free");
+        assert!(
+            !config.modules.async_patterns,
+            "async should be gated on Free"
+        );
+        assert!(
+            !config.modules.dependency,
+            "dependency should be gated on Free"
+        );
     }
 
     #[test]
@@ -181,8 +184,7 @@ mod tests {
     #[test]
     fn gate_only_disables_unlicensed_modules() {
         // License has only ml_module and react_module enabled (custom feature set)
-        let mut features: HashSet<String> =
-            FREE_FEATURES.iter().map(|s| s.to_string()).collect();
+        let mut features: HashSet<String> = FREE_FEATURES.iter().map(|s| s.to_string()).collect();
         features.insert("ml_module".to_string());
         features.insert("react_module".to_string());
 
@@ -199,8 +201,14 @@ mod tests {
         assert!(config.modules.ml, "ml_module is licensed");
         assert!(config.modules.react, "react_module is licensed");
         assert!(!config.modules.infra, "infra_module is not licensed");
-        assert!(!config.modules.async_patterns, "async_module is not licensed");
-        assert!(!config.modules.dependency, "dependency_module is not licensed");
+        assert!(
+            !config.modules.async_patterns,
+            "async_module is not licensed"
+        );
+        assert!(
+            !config.modules.dependency,
+            "dependency_module is not licensed"
+        );
     }
 
     // --- require_feature ---
@@ -217,7 +225,10 @@ mod tests {
         let license = make_license(Tier::Free);
         let err = require_feature("auto_fix", &license).unwrap_err();
         match err {
-            LicenseError::FeatureNotLicensed { feature, required_tier } => {
+            LicenseError::FeatureNotLicensed {
+                feature,
+                required_tier,
+            } => {
                 assert_eq!(feature, "auto_fix");
                 assert_eq!(required_tier, Tier::Pro);
             }
@@ -229,7 +240,10 @@ mod tests {
     fn require_feature_free_features_always_pass() {
         let license = License::default(); // Free tier
         for f in FREE_FEATURES {
-            assert!(require_feature(f, &license).is_ok(), "Free feature {f} should pass");
+            assert!(
+                require_feature(f, &license).is_ok(),
+                "Free feature {f} should pass"
+            );
         }
     }
 

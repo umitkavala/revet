@@ -120,7 +120,10 @@ mod tests {
             assert!(features.contains(*f), "Pro should include {f}");
         }
         for f in TEAM_FEATURES {
-            assert!(!features.contains(*f), "Pro should not include Team feature {f}");
+            assert!(
+                !features.contains(*f),
+                "Pro should not include Team feature {f}"
+            );
         }
     }
 
@@ -128,7 +131,10 @@ mod tests {
     fn build_default_features_team() {
         let features = build_default_features(Tier::Team);
         for f in FREE_FEATURES {
-            assert!(features.contains(*f), "Team should include Free feature {f}");
+            assert!(
+                features.contains(*f),
+                "Team should include Free feature {f}"
+            );
         }
         for f in PRO_FEATURES {
             assert!(features.contains(*f), "Team should include Pro feature {f}");
@@ -146,7 +152,10 @@ mod tests {
 
         assert_eq!(free.len(), FREE_FEATURES.len());
         assert_eq!(pro.len(), FREE_FEATURES.len() + PRO_FEATURES.len());
-        assert_eq!(team.len(), FREE_FEATURES.len() + PRO_FEATURES.len() + TEAM_FEATURES.len());
+        assert_eq!(
+            team.len(),
+            FREE_FEATURES.len() + PRO_FEATURES.len() + TEAM_FEATURES.len()
+        );
     }
 
     #[test]

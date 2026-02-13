@@ -169,7 +169,11 @@ mod tests {
     fn license_serde_roundtrip() {
         let lic = License {
             tier: Tier::Pro,
-            features: PRO_FEATURES.iter().chain(FREE_FEATURES.iter()).map(|s| s.to_string()).collect(),
+            features: PRO_FEATURES
+                .iter()
+                .chain(FREE_FEATURES.iter())
+                .map(|s| s.to_string())
+                .collect(),
             expires_at: Some("2026-12-31".to_string()),
             cached_at: Some(1234567890),
         };
@@ -253,6 +257,8 @@ mod tests {
 
         assert!(LicenseError::InvalidKey.to_string().contains("Invalid"));
         assert!(LicenseError::Expired.to_string().contains("expired"));
-        assert!(LicenseError::NetworkError("timeout".into()).to_string().contains("timeout"));
+        assert!(LicenseError::NetworkError("timeout".into())
+            .to_string()
+            .contains("timeout"));
     }
 }

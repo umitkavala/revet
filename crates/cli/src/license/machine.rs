@@ -48,7 +48,10 @@ mod tests {
     fn machine_id_is_16_hex_chars() {
         let id = machine_id();
         assert_eq!(id.len(), 16, "Expected 16 hex chars, got: {id}");
-        assert!(id.chars().all(|c| c.is_ascii_hexdigit()), "Non-hex char in: {id}");
+        assert!(
+            id.chars().all(|c| c.is_ascii_hexdigit()),
+            "Non-hex char in: {id}"
+        );
     }
 
     #[test]
