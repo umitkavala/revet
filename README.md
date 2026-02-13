@@ -10,7 +10,7 @@ Revet is a developer-first code review agent that combines deterministic static 
 
 - **Not a GPT wrapper:** 80% of checks are deterministic (free, fast, reproducible)
 - **Cross-file impact analysis:** Detects breaking changes that affect other parts of your codebase
-- **Domain-specific intelligence:** Specialized modules for security, ML pipelines, infrastructure, React, async patterns, and dependency hygiene — plus user-defined custom rules
+- **Domain-specific intelligence:** Specialized modules for security, ML pipelines, infrastructure, React, async patterns, dependency hygiene, and error handling — plus user-defined custom rules
 - **Offline-first:** All deterministic checks work without network access
 - **Code stays local:** LLMs receive structured context, not your source code
 
@@ -120,6 +120,16 @@ Detects import anti-patterns and manifest issues. Prefix: `DEP-`
 - Circular import workarounds, unpinned dependency versions (Warning)
 - `require()` instead of ES import, deeply nested relative imports, git dependencies (Info)
 
+### Error Handling (`modules.error_handling = true`, default: off)
+
+Detects error handling anti-patterns across languages. Prefix: `ERR-`
+
+- Empty catch/except blocks, bare `except:` in Python (Warning)
+- `.unwrap()` calls, `panic!()`/`todo!()`/`unimplemented!()` in non-test Rust code (Warning)
+- Too-broad exception catches (`except Exception`/`except BaseException`) (Warning)
+- Empty `.catch()` callbacks in JS/TS, discarded errors (`_ = err`) in Go (Warning)
+- Catch blocks that only log without re-throwing (Info)
+
 ### Custom Rules
 
 Define project-specific regex rules directly in `.revet.toml` — no Rust code needed. Prefix: `CUSTOM-`
@@ -221,6 +231,7 @@ infra = false           # Infrastructure checks (Terraform, K8s, Docker)
 react = false           # React hooks checks
 async_patterns = false  # Async/await anti-pattern checks
 dependency = false      # Dependency hygiene checks
+error_handling = false  # Error handling anti-pattern checks
 
 [ignore]
 paths = ["vendor/", "node_modules/", "dist/"]
@@ -254,7 +265,7 @@ Revet works fully offline with the **Free** tier. For Pro and Team features:
 
 **Free tier** includes: code graph, cross-file impact analysis, basic security (secret exposure + SQL injection), and all output formats.
 
-**Pro tier** adds: `--fix` auto-remediation, ML/infra/react/async/dependency modules, and `explain`.
+**Pro tier** adds: `--fix` auto-remediation, ML/infra/react/async/dependency/error-handling modules, and `explain`.
 
 **Team tier** adds: shared config, GitHub Action PR comments, and dashboard.
 
@@ -288,7 +299,7 @@ License is cached locally at `~/.config/revet/license.json` (24h TTL). When the 
 ```
 
 1. **Layer 1: Code Graph** — Tree-sitter AST parsing, dependency tracking via petgraph, cross-file impact analysis, graph caching with CozoDB
-2. **Layer 2: Domain Analyzers** — Regex-based pattern scanning for security, ML, infrastructure, React, async, dependency, and user-defined custom rules
+2. **Layer 2: Domain Analyzers** — Regex-based pattern scanning for security, ML, infrastructure, React, async, dependency, error handling, and user-defined custom rules
 3. **Layer 3: LLM Reasoning** — Deep analysis with `--ai` flag (coming soon)
 
 ## Development

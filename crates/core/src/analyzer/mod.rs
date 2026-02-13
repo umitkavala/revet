@@ -7,6 +7,7 @@
 pub mod async_patterns;
 pub mod custom_rules;
 pub mod dependency;
+pub mod error_handling;
 pub mod infra;
 pub mod ml_pipeline;
 pub mod react_hooks;
@@ -67,6 +68,7 @@ impl AnalyzerDispatcher {
                 Box::new(react_hooks::ReactHooksAnalyzer::new()),
                 Box::new(async_patterns::AsyncPatternsAnalyzer::new()),
                 Box::new(dependency::DependencyAnalyzer::new()),
+                Box::new(error_handling::ErrorHandlingAnalyzer::new()),
             ],
         }
     }

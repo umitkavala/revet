@@ -194,6 +194,31 @@ const EXPLANATIONS: &[CategoryExplanation] = &[
         ],
     },
     CategoryExplanation {
+        prefix: "ERR",
+        name: "Error Handling Anti-Pattern",
+        description: "Common error handling mistakes that silently swallow errors, catch too \
+            broadly, or use panic-inducing code in production. These patterns hide bugs, make \
+            debugging harder, and can cause unexpected crashes or data loss.",
+        why_it_matters: &[
+            "Empty catch blocks silently swallow errors, hiding bugs that surface later",
+            "Bare except: in Python catches KeyboardInterrupt and SystemExit, preventing graceful shutdown",
+            ".unwrap() in Rust panics on None/Err, crashing the program instead of handling the error",
+            "Discarding errors in Go (_ = err) defeats the language's explicit error handling design",
+        ],
+        how_to_fix: &[
+            "Handle errors explicitly: log, retry, propagate, or convert to a user-friendly message",
+            "Catch specific exception types instead of bare except: or except Exception:",
+            "Use the ? operator in Rust instead of .unwrap(), or .unwrap_or_else() for fallbacks",
+            "In Go, always check err != nil and return or handle the error",
+        ],
+        example_bad: r#"    try { riskyOp(); } catch (e) {}  // silently swallowed"#,
+        example_good: r#"    try { riskyOp(); } catch (e) { logger.error(e); throw e; }"#,
+        references: &[
+            "Go Error Handling: https://go.dev/blog/error-handling-and-go",
+            "Rust Error Handling: https://doc.rust-lang.org/book/ch09-00-error-handling.html",
+        ],
+    },
+    CategoryExplanation {
         prefix: "SUPPRESS",
         name: "Inline Suppression",
         description: "Inline comments that silence specific findings at the source location. \
@@ -429,8 +454,8 @@ mod tests {
     #[test]
     fn test_all_known_prefixes() {
         let known = [
-            "SEC", "SQL", "ML", "INFRA", "HOOKS", "ASYNC", "DEP", "CUSTOM", "SUPPRESS", "IMPACT",
-            "PARSE",
+            "SEC", "SQL", "ML", "INFRA", "HOOKS", "ASYNC", "DEP", "ERR", "CUSTOM", "SUPPRESS",
+            "IMPACT", "PARSE",
         ];
         for prefix in &known {
             assert!(

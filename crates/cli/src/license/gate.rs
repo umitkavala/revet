@@ -60,6 +60,10 @@ pub fn apply_license_gates(config: &mut RevetConfig, license: &License) {
         config.modules.dependency = false;
         gated.push("dependency");
     }
+    if config.modules.error_handling && !license.has_feature("error_handling_module") {
+        config.modules.error_handling = false;
+        gated.push("error_handling");
+    }
 
     if !gated.is_empty() {
         eprintln!(
@@ -102,6 +106,7 @@ mod tests {
         config.modules.react = true;
         config.modules.async_patterns = true;
         config.modules.dependency = true;
+        config.modules.error_handling = true;
         config
     }
 
@@ -128,6 +133,10 @@ mod tests {
             !config.modules.dependency,
             "dependency should be gated on Free"
         );
+        assert!(
+            !config.modules.error_handling,
+            "error_handling should be gated on Free"
+        );
     }
 
     #[test]
@@ -143,6 +152,7 @@ mod tests {
         assert!(config.modules.react);
         assert!(config.modules.async_patterns);
         assert!(config.modules.dependency);
+        assert!(config.modules.error_handling);
     }
 
     #[test]
@@ -158,6 +168,7 @@ mod tests {
         assert!(config.modules.react);
         assert!(config.modules.async_patterns);
         assert!(config.modules.dependency);
+        assert!(config.modules.error_handling);
     }
 
     #[test]
@@ -179,6 +190,7 @@ mod tests {
         assert!(!config.modules.react);
         assert!(!config.modules.async_patterns);
         assert!(!config.modules.dependency);
+        assert!(!config.modules.error_handling);
     }
 
     #[test]

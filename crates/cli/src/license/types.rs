@@ -23,6 +23,7 @@ pub const PRO_FEATURES: &[&str] = &[
     "react_module",
     "async_module",
     "dependency_module",
+    "error_handling_module",
     "explain",
 ];
 
