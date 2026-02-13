@@ -12,7 +12,8 @@ pub mod swift;
 pub mod typescript;
 
 use crate::graph::{CodeGraph, NodeId};
-use std::path::Path;
+use rayon::prelude::*;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 /// Error types for parsing operations
@@ -123,6 +124,42 @@ impl ParserDispatcher {
         })?;
 
         parser.parse_file(file_path, graph)
+    }
+
+    /// Parse multiple files in parallel, then merge into a single graph.
+    ///
+    /// Each file is parsed into its own small `CodeGraph` (no contention),
+    /// then all per-file graphs are merged sequentially into one result.
+    /// Returns `(merged_graph, parse_errors)`.
+    pub fn parse_files_parallel(
+        &self,
+        files: &[PathBuf],
+        root: PathBuf,
+    ) -> (CodeGraph, Vec<String>) {
+        // Parallel map: each file → (CodeGraph, Option<error string>)
+        let per_file: Vec<(CodeGraph, Option<String>)> = files
+            .par_iter()
+            .map(|file| {
+                let mut local_graph = CodeGraph::new(root.clone());
+                match self.parse_file(file, &mut local_graph) {
+                    Ok(_) => (local_graph, None),
+                    Err(e) => (local_graph, Some(format!("{}: {}", file.display(), e))),
+                }
+            })
+            .collect();
+
+        // Sequential merge
+        let mut graph = CodeGraph::new(root);
+        let mut errors = Vec::new();
+
+        for (local_graph, err) in per_file {
+            graph.merge(local_graph);
+            if let Some(e) = err {
+                errors.push(e);
+            }
+        }
+
+        (graph, errors)
     }
 
     /// Get all supported file extensions

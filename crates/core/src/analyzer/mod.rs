@@ -16,6 +16,7 @@ pub mod sql_injection;
 
 use crate::config::RevetConfig;
 use crate::finding::{Finding, FixKind, Severity};
+use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 
 /// Trait for domain-specific analyzers
@@ -141,6 +142,49 @@ impl AnalyzerDispatcher {
                 .filter(|f| !config.ignore.findings.contains(&f.id))
                 .collect();
 
+            all_findings.extend(findings);
+        }
+
+        all_findings
+    }
+
+    /// Run all enabled analyzers in parallel and return combined findings.
+    ///
+    /// Each analyzer runs on its own rayon task. Finding IDs are renumbered
+    /// per-prefix after collection to ensure sequential ordering.
+    pub fn run_all_parallel(
+        &self,
+        files: &[PathBuf],
+        repo_root: &Path,
+        config: &RevetConfig,
+    ) -> Vec<Finding> {
+        // Collect enabled analyzers
+        let enabled: Vec<&dyn Analyzer> = self
+            .analyzers
+            .iter()
+            .filter(|a| a.is_enabled(config))
+            .map(|a| &**a)
+            .collect();
+
+        // Run all analyzers in parallel
+        let per_analyzer: Vec<(String, Vec<Finding>)> = enabled
+            .par_iter()
+            .map(|analyzer| {
+                let findings = analyzer.analyze_files(files, repo_root);
+                (analyzer.finding_prefix().to_string(), findings)
+            })
+            .collect();
+
+        // Sequential post-processing: renumber and filter
+        let mut all_findings = Vec::new();
+        for (prefix, mut findings) in per_analyzer {
+            for (i, finding) in findings.iter_mut().enumerate() {
+                finding.id = format!("{}-{:03}", prefix, i + 1);
+            }
+            let findings: Vec<Finding> = findings
+                .into_iter()
+                .filter(|f| !config.ignore.findings.contains(&f.id))
+                .collect();
             all_findings.extend(findings);
         }
 

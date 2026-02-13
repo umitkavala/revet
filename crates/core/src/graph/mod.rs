@@ -14,6 +14,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+/// Result of merging another graph into this one.
+/// Maps old NodeIds (from the source graph) to new NodeIds (in the target graph).
+pub type MergeMap = HashMap<NodeId, NodeId>;
+
 /// Unique identifier for a node in the code graph
 pub type NodeId = NodeIndex;
 
@@ -131,6 +135,39 @@ impl CodeGraph {
     /// Get the underlying petgraph
     pub fn inner_graph(&self) -> &DiGraph<Node, Edge> {
         &self.graph
+    }
+
+    /// Merge another graph into this one.
+    ///
+    /// All nodes and edges from `other` are added to `self`. Node IDs are
+    /// remapped so there are no collisions. The returned [`MergeMap`] maps
+    /// old IDs (in `other`) to their new IDs (in `self`).
+    ///
+    /// This is the key enabler for parallel parse-then-merge: each thread
+    /// builds its own small `CodeGraph`, then they are merged sequentially
+    /// into one authoritative graph with zero contention during the expensive
+    /// parse phase.
+    pub fn merge(&mut self, other: CodeGraph) -> MergeMap {
+        let mut id_map: MergeMap = HashMap::new();
+
+        // 1. Re-add all nodes from `other`
+        for old_id in other.graph.node_indices() {
+            let node = other.graph[old_id].clone();
+            let new_id = self.add_node(node);
+            id_map.insert(old_id, new_id);
+        }
+
+        // 2. Re-add all edges, remapping source/target
+        for old_edge in other.graph.edge_indices() {
+            if let Some((src, tgt)) = other.graph.edge_endpoints(old_edge) {
+                let new_src = id_map[&src];
+                let new_tgt = id_map[&tgt];
+                let edge = other.graph[old_edge].clone();
+                self.add_edge(new_src, new_tgt, edge);
+            }
+        }
+
+        id_map
     }
 
     /// Get a query interface for complex graph operations

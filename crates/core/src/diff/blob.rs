@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use git2::{ObjectType, Oid, Repository};
+use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 
 use crate::graph::CodeGraph;
@@ -117,6 +118,9 @@ impl GitTreeReader {
     /// appropriate language parser, and returns a complete graph. File paths
     /// in the graph use absolute paths (`repo_root.join(relative_path)`) to
     /// match the convention used by the live graph.
+    ///
+    /// Parsing is parallelized: each file is parsed into its own graph, then
+    /// all per-file graphs are merged sequentially.
     pub fn build_graph_at_ref(
         &self,
         ref_spec: &str,
@@ -126,16 +130,22 @@ impl GitTreeReader {
         let extensions = dispatcher.supported_extensions();
         let files = self.read_files_at_ref(ref_spec, &extensions)?;
 
+        // Parallel parse: each file → its own CodeGraph
+        let per_file: Vec<CodeGraph> = files
+            .par_iter()
+            .filter_map(|git_file| {
+                let abs_path = repo_root.join(&git_file.path);
+                let parser = dispatcher.find_parser(&abs_path)?;
+                let mut local_graph = CodeGraph::new(repo_root.to_path_buf());
+                let _ = parser.parse_source(&git_file.content, &abs_path, &mut local_graph);
+                Some(local_graph)
+            })
+            .collect();
+
+        // Sequential merge
         let mut graph = CodeGraph::new(repo_root.to_path_buf());
-
-        for git_file in &files {
-            // Use absolute path to match the live graph's convention
-            let abs_path = repo_root.join(&git_file.path);
-
-            if let Some(parser) = dispatcher.find_parser(&abs_path) {
-                // Ignore parse errors for individual files — the graph is best-effort
-                let _ = parser.parse_source(&git_file.content, &abs_path, &mut graph);
-            }
+        for local_graph in per_file {
+            graph.merge(local_graph);
         }
 
         Ok(graph)
