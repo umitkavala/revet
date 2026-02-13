@@ -3,7 +3,7 @@
 use anyhow::Result;
 use colored::Colorize;
 
-use crate::license::{self, License};
+use crate::license::License;
 
 struct CategoryExplanation {
     prefix: &'static str,
@@ -384,11 +384,7 @@ fn print_explanation(explanation: &CategoryExplanation) {
     println!();
 }
 
-pub fn run(finding_id: &str, use_ai: bool, lic: &License) -> Result<()> {
-    if !license::gate::check_and_warn("explain", "explain", lic) {
-        return Ok(());
-    }
-
+pub fn run(finding_id: &str, use_ai: bool, _lic: &License) -> Result<()> {
     if use_ai {
         eprintln!(
             "{}",

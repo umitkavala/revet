@@ -151,7 +151,7 @@ pub fn run(base: &str, cli: &crate::Cli, lic: &License) -> Result<ReviewExitCode
     );
 
     // ── 6. Apply fixes (before filtering) ────────────────────────
-    if cli.fix && license::gate::check_and_warn("auto_fix", "--fix", lic) {
+    if cli.fix {
         eprint!("  Applying fixes... ");
         match apply_fixes(&findings) {
             Ok(report) => eprintln!(

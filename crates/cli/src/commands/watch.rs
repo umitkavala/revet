@@ -217,7 +217,7 @@ fn run_analysis(repo_path: &Path, cli: &crate::Cli, lic: &License) -> Result<()>
     );
 
     // ── 5. Apply fixes ────────────────────────────────────────
-    if cli.fix && license::gate::check_and_warn("auto_fix", "--fix", lic) {
+    if cli.fix {
         eprint!("  Applying fixes... ");
         match apply_fixes(&findings) {
             Ok(report) => eprintln!(

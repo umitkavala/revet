@@ -263,9 +263,9 @@ Revet works fully offline with the **Free** tier. For Pro and Team features:
 | `revet auth status` | Show current tier and features |
 | `revet auth logout` | Remove stored credentials |
 
-**Free tier** includes: code graph, cross-file impact analysis, basic security (secret exposure + SQL injection), and all output formats.
+**Free tier** includes: all deterministic features — code graph, cross-file impact analysis, all analyzers (security, ML, infra, React, async, dependency, error handling), custom rules, `--fix` auto-remediation, `explain`, and all output formats.
 
-**Pro tier** adds: `--fix` auto-remediation, ML/infra/react/async/dependency/error-handling modules, and `explain`.
+**Pro tier** adds: LLM-powered reasoning with `--ai` (coming soon).
 
 **Team tier** adds: shared config, GitHub Action PR comments, and dashboard.
 

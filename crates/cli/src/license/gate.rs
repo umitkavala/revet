@@ -19,6 +19,7 @@ pub fn require_feature(feature: &str, license: &License) -> Result<(), LicenseEr
 
 /// Returns `true` if the feature is allowed.
 /// If not, prints a warning to stderr and returns `false`. Never panics or exits.
+#[allow(dead_code)]
 pub fn check_and_warn(feature: &str, label: &str, license: &License) -> bool {
     if license.has_feature(feature) {
         return true;
@@ -36,44 +37,11 @@ pub fn check_and_warn(feature: &str, label: &str, license: &License) -> bool {
 }
 
 /// Disables config modules that the current license doesn't cover.
-/// Prints one combined warning line if any modules were gated.
-pub fn apply_license_gates(config: &mut RevetConfig, license: &License) {
-    let mut gated: Vec<&str> = Vec::new();
-
-    if config.modules.ml && !license.has_feature("ml_module") {
-        config.modules.ml = false;
-        gated.push("ml");
-    }
-    if config.modules.infra && !license.has_feature("infra_module") {
-        config.modules.infra = false;
-        gated.push("infra");
-    }
-    if config.modules.react && !license.has_feature("react_module") {
-        config.modules.react = false;
-        gated.push("react");
-    }
-    if config.modules.async_patterns && !license.has_feature("async_module") {
-        config.modules.async_patterns = false;
-        gated.push("async_patterns");
-    }
-    if config.modules.dependency && !license.has_feature("dependency_module") {
-        config.modules.dependency = false;
-        gated.push("dependency");
-    }
-    if config.modules.error_handling && !license.has_feature("error_handling_module") {
-        config.modules.error_handling = false;
-        gated.push("error_handling");
-    }
-
-    if !gated.is_empty() {
-        eprintln!(
-            "  {} modules [{}] require {}. Run '{}' to upgrade.",
-            "\u{26a1}".yellow(),
-            gated.join(", ").bold(),
-            "Pro".cyan(),
-            "revet auth".bold(),
-        );
-    }
+/// Currently a no-op: all deterministic modules are free.
+/// Retained for future LLM/cloud feature gating.
+pub fn apply_license_gates(_config: &mut RevetConfig, _license: &License) {
+    // All deterministic features (analyzers, --fix, explain) are free.
+    // This function will gate LLM/cloud features when Layer 3 is added.
 }
 
 #[cfg(test)]
@@ -110,33 +78,23 @@ mod tests {
         config
     }
 
-    // --- apply_license_gates ---
+    // --- apply_license_gates (now a no-op) ---
 
     #[test]
-    fn free_tier_disables_pro_modules() {
+    fn free_tier_keeps_all_modules() {
         let license = make_license(Tier::Free);
         let mut config = all_modules_enabled();
 
         apply_license_gates(&mut config, &license);
 
-        // Free tier keeps security (basic_security is Free)
+        // All deterministic modules are free — nothing gets gated
         assert!(config.modules.security);
-        // Free tier disables all Pro modules
-        assert!(!config.modules.ml, "ml should be gated on Free");
-        assert!(!config.modules.infra, "infra should be gated on Free");
-        assert!(!config.modules.react, "react should be gated on Free");
-        assert!(
-            !config.modules.async_patterns,
-            "async should be gated on Free"
-        );
-        assert!(
-            !config.modules.dependency,
-            "dependency should be gated on Free"
-        );
-        assert!(
-            !config.modules.error_handling,
-            "error_handling should be gated on Free"
-        );
+        assert!(config.modules.ml);
+        assert!(config.modules.infra);
+        assert!(config.modules.react);
+        assert!(config.modules.async_patterns);
+        assert!(config.modules.dependency);
+        assert!(config.modules.error_handling);
     }
 
     #[test]
@@ -172,55 +130,16 @@ mod tests {
     }
 
     #[test]
-    fn free_tier_does_not_gate_already_disabled_modules() {
+    fn gates_do_not_touch_disabled_modules() {
         let license = make_license(Tier::Free);
         let mut config = RevetConfig::default();
-        // All extra modules default to false already
         config.modules.ml = false;
         config.modules.infra = false;
-        config.modules.react = false;
-        config.modules.async_patterns = false;
-        config.modules.dependency = false;
 
         apply_license_gates(&mut config, &license);
 
-        // Nothing should change — modules were already off
         assert!(!config.modules.ml);
         assert!(!config.modules.infra);
-        assert!(!config.modules.react);
-        assert!(!config.modules.async_patterns);
-        assert!(!config.modules.dependency);
-        assert!(!config.modules.error_handling);
-    }
-
-    #[test]
-    fn gate_only_disables_unlicensed_modules() {
-        // License has only ml_module and react_module enabled (custom feature set)
-        let mut features: HashSet<String> = FREE_FEATURES.iter().map(|s| s.to_string()).collect();
-        features.insert("ml_module".to_string());
-        features.insert("react_module".to_string());
-
-        let license = License {
-            tier: Tier::Pro,
-            features,
-            expires_at: None,
-            cached_at: None,
-        };
-
-        let mut config = all_modules_enabled();
-        apply_license_gates(&mut config, &license);
-
-        assert!(config.modules.ml, "ml_module is licensed");
-        assert!(config.modules.react, "react_module is licensed");
-        assert!(!config.modules.infra, "infra_module is not licensed");
-        assert!(
-            !config.modules.async_patterns,
-            "async_module is not licensed"
-        );
-        assert!(
-            !config.modules.dependency,
-            "dependency_module is not licensed"
-        );
     }
 
     // --- require_feature ---
@@ -229,19 +148,20 @@ mod tests {
     fn require_feature_ok_when_licensed() {
         let license = make_license(Tier::Pro);
         assert!(require_feature("auto_fix", &license).is_ok());
+        assert!(require_feature("ai_reasoning", &license).is_ok());
         assert!(require_feature("graph", &license).is_ok());
     }
 
     #[test]
     fn require_feature_err_when_not_licensed() {
         let license = make_license(Tier::Free);
-        let err = require_feature("auto_fix", &license).unwrap_err();
+        let err = require_feature("ai_reasoning", &license).unwrap_err();
         match err {
             LicenseError::FeatureNotLicensed {
                 feature,
                 required_tier,
             } => {
-                assert_eq!(feature, "auto_fix");
+                assert_eq!(feature, "ai_reasoning");
                 assert_eq!(required_tier, Tier::Pro);
             }
             _ => panic!("Expected FeatureNotLicensed"),
@@ -259,17 +179,25 @@ mod tests {
         }
     }
 
+    #[test]
+    fn auto_fix_and_explain_are_free() {
+        let license = License::default(); // Free tier
+        assert!(require_feature("auto_fix", &license).is_ok());
+        assert!(require_feature("explain", &license).is_ok());
+    }
+
     // --- check_and_warn ---
 
     #[test]
-    fn check_and_warn_returns_true_when_licensed() {
-        let license = make_license(Tier::Pro);
+    fn check_and_warn_returns_true_for_free_features() {
+        let license = make_license(Tier::Free);
         assert!(check_and_warn("auto_fix", "Auto-fix", &license));
+        assert!(check_and_warn("explain", "explain", &license));
     }
 
     #[test]
-    fn check_and_warn_returns_false_when_not_licensed() {
+    fn check_and_warn_returns_false_for_pro_features_on_free() {
         let license = make_license(Tier::Free);
-        assert!(!check_and_warn("auto_fix", "Auto-fix", &license));
+        assert!(!check_and_warn("ai_reasoning", "AI reasoning", &license));
     }
 }

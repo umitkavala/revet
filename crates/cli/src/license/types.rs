@@ -12,11 +12,6 @@ pub const FREE_FEATURES: &[&str] = &[
     "circular_deps",
     "basic_security",
     "sarif_output",
-];
-
-/// Feature constants — Pro tier (includes Free)
-pub const PRO_FEATURES: &[&str] = &[
-    "ai_reasoning",
     "auto_fix",
     "ml_module",
     "infra_module",
@@ -26,6 +21,9 @@ pub const PRO_FEATURES: &[&str] = &[
     "error_handling_module",
     "explain",
 ];
+
+/// Feature constants — Pro tier (includes Free)
+pub const PRO_FEATURES: &[&str] = &["ai_reasoning"];
 
 /// Feature constants — Team tier (includes Pro + Free)
 pub const TEAM_FEATURES: &[&str] = &["shared_config", "github_action", "team_dashboard"];
@@ -162,7 +160,8 @@ mod tests {
     fn license_has_feature() {
         let lic = License::default();
         assert!(lic.has_feature("graph"));
-        assert!(!lic.has_feature("auto_fix"));
+        assert!(lic.has_feature("auto_fix"));
+        assert!(!lic.has_feature("ai_reasoning"));
         assert!(!lic.has_feature("nonexistent"));
     }
 
