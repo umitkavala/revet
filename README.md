@@ -11,6 +11,7 @@ Revet is a developer-first code review agent that combines deterministic static 
 - **Not a GPT wrapper:** 80% of checks are deterministic (free, fast, reproducible)
 - **Cross-file impact analysis:** Detects breaking changes that affect other parts of your codebase
 - **Domain-specific intelligence:** Specialized modules for security, ML pipelines, infrastructure, React, async patterns, dependency hygiene, and error handling — plus user-defined custom rules
+- **Parallel by default:** File parsing and analysis run in parallel via rayon for maximum throughput
 - **Offline-first:** All deterministic checks work without network access
 - **Code stays local:** LLMs receive structured context, not your source code
 
