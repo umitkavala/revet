@@ -19,7 +19,7 @@ pub mod parser;
 pub mod store;
 pub mod suppress;
 
-pub use analyzer::{Analyzer, AnalyzerDispatcher};
+pub use analyzer::{Analyzer, AnalyzerDispatcher, GraphAnalyzer};
 pub use baseline::{filter_findings, Baseline, BaselineEntry};
 pub use cache::{GraphCache, GraphCacheMeta};
 pub use config::RevetConfig;

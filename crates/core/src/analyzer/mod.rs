@@ -5,6 +5,7 @@
 //! via `.revet.toml`.
 
 pub mod async_patterns;
+pub mod circular_imports;
 pub mod custom_rules;
 pub mod dependency;
 pub mod error_handling;
@@ -13,17 +14,18 @@ pub mod ml_pipeline;
 pub mod react_hooks;
 pub mod secret_exposure;
 pub mod sql_injection;
+pub mod unused_exports;
 
 use crate::config::RevetConfig;
 use crate::finding::{Finding, FixKind, Severity};
+use crate::graph::CodeGraph;
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 
 /// Trait for domain-specific analyzers
 ///
 /// Analyzers scan raw file content for patterns that don't require AST parsing
-/// (e.g., hardcoded secrets, configuration issues). For analyzers that need
-/// the code graph, a separate `GraphAnalyzer` trait can be introduced later.
+/// (e.g., hardcoded secrets, configuration issues).
 pub trait Analyzer: Send + Sync {
     /// Human-readable name of this analyzer
     fn name(&self) -> &str;
@@ -52,9 +54,25 @@ pub trait Analyzer: Send + Sync {
     }
 }
 
+/// Trait for graph-based analyzers that query the CodeGraph.
+pub trait GraphAnalyzer: Send + Sync {
+    /// Human-readable name of this analyzer
+    fn name(&self) -> &str;
+
+    /// Finding ID prefix (e.g., "DEAD" produces "DEAD-001", "DEAD-002", ...)
+    fn finding_prefix(&self) -> &str;
+
+    /// Whether this analyzer is enabled given the current config
+    fn is_enabled(&self, config: &RevetConfig) -> bool;
+
+    /// Analyze the code graph and return findings
+    fn analyze_graph(&self, graph: &CodeGraph, config: &RevetConfig) -> Vec<Finding>;
+}
+
 /// Dispatches analysis across all registered analyzers
 pub struct AnalyzerDispatcher {
     analyzers: Vec<Box<dyn Analyzer>>,
+    graph_analyzers: Vec<Box<dyn GraphAnalyzer>>,
 }
 
 impl AnalyzerDispatcher {
@@ -71,6 +89,10 @@ impl AnalyzerDispatcher {
                 Box::new(dependency::DependencyAnalyzer::new()),
                 Box::new(error_handling::ErrorHandlingAnalyzer::new()),
             ],
+            graph_analyzers: vec![
+                Box::new(unused_exports::UnusedExportsAnalyzer::new()),
+                Box::new(circular_imports::CircularImportsAnalyzer::new()),
+            ],
         }
     }
 
@@ -82,6 +104,36 @@ impl AnalyzerDispatcher {
             dispatcher.analyzers.push(Box::new(custom));
         }
         dispatcher
+    }
+
+    /// Run all enabled graph analyzers and return combined findings.
+    ///
+    /// Finding IDs are renumbered per-prefix to ensure sequential ordering
+    /// (e.g., DEAD-001, DEAD-002, ...).
+    pub fn run_graph_analyzers(&self, graph: &CodeGraph, config: &RevetConfig) -> Vec<Finding> {
+        let mut all_findings = Vec::new();
+
+        for analyzer in &self.graph_analyzers {
+            if !analyzer.is_enabled(config) {
+                continue;
+            }
+
+            let mut findings = analyzer.analyze_graph(graph, config);
+            let prefix = analyzer.finding_prefix();
+
+            for (i, finding) in findings.iter_mut().enumerate() {
+                finding.id = format!("{}-{:03}", prefix, i + 1);
+            }
+
+            let findings: Vec<Finding> = findings
+                .into_iter()
+                .filter(|f| !config.ignore.findings.contains(&f.id))
+                .collect();
+
+            all_findings.extend(findings);
+        }
+
+        all_findings
     }
 
     /// Collect extra file extensions needed by enabled analyzers.

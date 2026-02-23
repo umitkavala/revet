@@ -161,6 +161,19 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         analyzer_start.elapsed().as_secs_f64()
     );
 
+    // ── 4b'. Graph analyzers ─────────────────────────────────────────
+    eprint!("  Running graph analyzers... ");
+    let ga_start = Instant::now();
+    let graph_findings = analyzer_dispatcher.run_graph_analyzers(&graph, &config);
+    let graph_count = graph_findings.len();
+    findings.extend(graph_findings);
+    eprintln!(
+        "{} — {} finding(s) ({:.1}s)",
+        "done".green(),
+        graph_count,
+        ga_start.elapsed().as_secs_f64()
+    );
+
     // ── 4c. Apply fixes ───────────────────────────────────────────
     if cli.fix {
         eprint!("  Applying fixes... ");

@@ -109,6 +109,14 @@ pub struct ModulesConfig {
     #[serde(default)]
     pub error_handling: bool,
 
+    /// Detect unused exported symbols (opt-in, can be noisy)
+    #[serde(default)]
+    pub dead_code: bool,
+
+    /// Detect circular import chains (default on)
+    #[serde(default = "default_true")]
+    pub cycles: bool,
+
     /// Module-specific configurations
     #[serde(flatten)]
     pub module_configs: HashMap<String, toml::Value>,
@@ -239,6 +247,8 @@ impl Default for ModulesConfig {
             async_patterns: false,
             dependency: false,
             error_handling: false,
+            dead_code: false,
+            cycles: true,
             module_configs: HashMap::new(),
         }
     }
