@@ -17,12 +17,7 @@ use super::review::{
     print_sarif, print_terminal, resolve_format, Format,
 };
 
-pub fn run(
-    path: Option<&Path>,
-    cli: &crate::Cli,
-    debounce_ms: u64,
-    no_clear: bool,
-) -> Result<()> {
+pub fn run(path: Option<&Path>, cli: &crate::Cli, debounce_ms: u64, no_clear: bool) -> Result<()> {
     let repo_path = path.unwrap_or_else(|| Path::new("."));
     let repo_path = std::fs::canonicalize(repo_path).unwrap_or_else(|_| repo_path.to_path_buf());
 
