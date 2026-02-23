@@ -365,6 +365,7 @@ fn test_find_by_edge_kind() {
         NodeData::Import {
             module: "os".to_string(),
             imported_names: vec!["path".to_string()],
+            resolved_path: None,
         },
     ));
 

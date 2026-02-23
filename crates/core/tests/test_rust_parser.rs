@@ -396,6 +396,7 @@ use crate::graph::CodeGraph;
     if let NodeData::Import {
         module,
         imported_names,
+        ..
     } = read_import.1.data()
     {
         assert_eq!(module, "std::io");
@@ -418,6 +419,7 @@ use crate::graph::CodeGraph;
     if let NodeData::Import {
         module,
         imported_names,
+        ..
     } = group_import.1.data()
     {
         assert_eq!(module, "std::collections");

@@ -30,8 +30,8 @@ pub use diff::{
 pub use discovery::{discover_files, discover_files_extended};
 pub use finding::{Finding, FixKind, ReviewSummary, Severity};
 pub use fixer::{apply_fixes, FixReport};
-pub use graph::{CodeGraph, Edge, MergeMap, Node, NodeData, NodeId, NodeKind};
-pub use parser::{LanguageParser, ParseError, ParserDispatcher};
+pub use graph::{CodeGraph, Edge, EdgeKind, MergeMap, Node, NodeData, NodeId, NodeKind};
+pub use parser::{LanguageParser, ParseError, ParseState, ParserDispatcher, UnresolvedImport};
 pub use store::{reconstruct_graph, GraphStore, MemoryStore, StoreNodeId};
 pub use suppress::{filter_findings_by_inline, matches_suppression, parse_suppressions};
 

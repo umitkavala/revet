@@ -595,6 +595,7 @@ impl JavaParser {
             NodeData::Import {
                 module,
                 imported_names: vec![imported_name],
+                resolved_path: None,
             },
         );
 

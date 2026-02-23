@@ -276,6 +276,7 @@ import { Component, OnInit } from '@angular/core';
     if let NodeData::Import {
         module,
         imported_names,
+        ..
     } = fs_import.1.data()
     {
         assert_eq!(module, "fs");

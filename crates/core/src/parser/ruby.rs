@@ -422,6 +422,7 @@ impl RubyParser {
             NodeData::Import {
                 module: module_path,
                 imported_names: vec![imported_name],
+                resolved_path: None,
             },
         );
 

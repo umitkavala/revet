@@ -1,6 +1,6 @@
 //! TypeScript/JavaScript language parser using Tree-sitter
 
-use super::{LanguageParser, ParseError};
+use super::{collect_import_state, LanguageParser, ParseError, ParseState};
 use crate::graph::{
     CodeGraph, Edge, EdgeKind, EdgeMetadata, Node, NodeData, NodeId, NodeKind, Parameter,
 };
@@ -1014,6 +1014,7 @@ impl TypeScriptParser {
             NodeData::Import {
                 module,
                 imported_names,
+                resolved_path: None,
             },
         );
 
@@ -1221,5 +1222,15 @@ impl LanguageParser for TypeScriptParser {
     ) -> Result<Vec<NodeId>, ParseError> {
         let tree = self.parse_tree(source)?;
         Ok(self.extract_nodes(&tree, source, file_path, graph))
+    }
+
+    fn parse_file_with_state(
+        &self,
+        file_path: &Path,
+        graph: &mut CodeGraph,
+    ) -> Result<(Vec<NodeId>, ParseState), ParseError> {
+        let ids = self.parse_file(file_path, graph)?;
+        let state = collect_import_state(graph, file_path);
+        Ok((ids, state))
     }
 }

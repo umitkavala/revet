@@ -550,6 +550,7 @@ impl RustParser {
             NodeData::Import {
                 module,
                 imported_names,
+                resolved_path: None,
             },
         );
 

@@ -164,6 +164,10 @@ pub enum NodeData {
     Import {
         module: String,
         imported_names: Vec<String>,
+        /// Resolved absolute path to the target file, set after cross-file resolution.
+        /// None for external (stdlib / third-party) modules or before resolution runs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        resolved_path: Option<std::path::PathBuf>,
     },
     APIEndpoint {
         http_method: String,

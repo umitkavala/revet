@@ -558,6 +558,7 @@ public class Test {}
     if let NodeData::Import {
         module,
         imported_names,
+        ..
     } = system_import.1.data()
     {
         assert_eq!(module, "System");

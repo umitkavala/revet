@@ -789,6 +789,7 @@ impl CSharpParser {
             NodeData::Import {
                 module: full_path,
                 imported_names: vec![imported_name],
+                resolved_path: None,
             },
         );
 
