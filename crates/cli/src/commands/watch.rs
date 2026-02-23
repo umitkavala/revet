@@ -12,8 +12,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::license::{self, License};
-
 use super::review::{
     build_summary, has_extension, has_filename, print_github, print_json, print_no_files,
     print_sarif, print_terminal, resolve_format, Format,
@@ -24,7 +22,6 @@ pub fn run(
     cli: &crate::Cli,
     debounce_ms: u64,
     no_clear: bool,
-    lic: &License,
 ) -> Result<()> {
     let repo_path = path.unwrap_or_else(|| Path::new("."));
     let repo_path = std::fs::canonicalize(repo_path).unwrap_or_else(|_| repo_path.to_path_buf());
@@ -36,7 +33,7 @@ pub fn run(
     eprintln!();
 
     // ── Initial run ────────────────────────────────────────────
-    run_analysis(&repo_path, cli, lic)?;
+    run_analysis(&repo_path, cli)?;
     eprintln!();
     eprintln!("  {}", "Watching for changes... (Ctrl-C to stop)".dimmed());
 
@@ -97,7 +94,7 @@ pub fn run(
                         eprintln!();
                     }
 
-                    match run_analysis(&repo_path, cli, lic) {
+                    match run_analysis(&repo_path, cli) {
                         Ok(_) => {}
                         Err(e) => {
                             eprintln!("  {}: {}", "analysis error".red(), e);
@@ -124,18 +121,17 @@ pub fn run(
     Ok(())
 }
 
-fn run_analysis(repo_path: &Path, cli: &crate::Cli, lic: &License) -> Result<()> {
+fn run_analysis(repo_path: &Path, cli: &crate::Cli) -> Result<()> {
     let start = Instant::now();
 
     // ── 1. Config (re-load each run) ──────────────────────────
-    let mut config = match RevetConfig::find_and_load(repo_path) {
+    let config = match RevetConfig::find_and_load(repo_path) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("  {}: {}", "config error".red(), e);
             RevetConfig::default()
         }
     };
-    license::gate::apply_license_gates(&mut config, lic);
     let format = resolve_format(cli, &config);
 
     // ── 2. File discovery (full scan) ─────────────────────────

@@ -116,13 +116,17 @@ pub struct ModulesConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AIConfig {
-    /// LLM provider
+    /// LLM provider (e.g. "anthropic", "openai")
     #[serde(default = "default_provider")]
     pub provider: String,
 
     /// Model name
     #[serde(default = "default_model")]
     pub model: String,
+
+    /// API key — can also be set via ANTHROPIC_API_KEY / OPENAI_API_KEY env var
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
 
     /// Max cost per run in USD
     #[serde(default = "default_max_cost")]
@@ -245,6 +249,7 @@ impl Default for AIConfig {
         Self {
             provider: default_provider(),
             model: default_model(),
+            api_key: None,
             max_cost_per_run: default_max_cost(),
         }
     }

@@ -27,12 +27,7 @@ glob.workspace = true
 notify.workspace = true
 notify-debouncer-mini.workspace = true
 ctrlc.workspace = true
-reqwest.workspace = true
-dirs.workspace = true
-sha2.workspace = true
-open.workspace = true
 thiserror.workspace = true
-hostname = "0.4"
 
 [dev-dependencies]
 tempfile = "3"

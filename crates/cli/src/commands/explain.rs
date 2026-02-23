@@ -3,8 +3,6 @@
 use anyhow::Result;
 use colored::Colorize;
 
-use crate::license::License;
-
 pub struct CategoryExplanation {
     pub prefix: &'static str,
     pub name: &'static str,
@@ -384,7 +382,7 @@ fn print_explanation(explanation: &CategoryExplanation) {
     println!();
 }
 
-pub fn run(finding_id: &str, use_ai: bool, _lic: &License) -> Result<()> {
+pub fn run(finding_id: &str, use_ai: bool) -> Result<()> {
     if use_ai {
         eprintln!(
             "{}",

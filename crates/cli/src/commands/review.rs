@@ -11,7 +11,6 @@ use revet_core::{
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
-use crate::license::{self, License};
 use crate::output;
 
 /// Exit status from the review command
@@ -23,7 +22,7 @@ pub enum ReviewExitCode {
     FindingsExceedThreshold,
 }
 
-pub fn run(path: Option<&Path>, cli: &crate::Cli, lic: &License) -> Result<ReviewExitCode> {
+pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     let start = Instant::now();
     let repo_path = path.unwrap_or_else(|| Path::new("."));
     let repo_path = std::fs::canonicalize(repo_path).unwrap_or_else(|_| repo_path.to_path_buf());
@@ -35,8 +34,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli, lic: &License) -> Result<Revie
     eprintln!();
 
     // ── 1. Config ────────────────────────────────────────────────
-    let mut config = RevetConfig::find_and_load(&repo_path)?;
-    license::gate::apply_license_gates(&mut config, lic);
+    let config = RevetConfig::find_and_load(&repo_path)?;
     let format = resolve_format(cli, &config);
 
     // ── 2. File Discovery ────────────────────────────────────────

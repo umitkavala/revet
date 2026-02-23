@@ -253,24 +253,18 @@ paths = ["*.ts", "*.js"]
 suggestion = "Use the logger utility instead"
 ```
 
-## Authentication
+## AI Features
 
-Revet works fully offline with the **Free** tier. For Pro and Team features:
+Revet is free and open source. All features — including code graph, cross-file impact analysis, all analyzers, custom rules, `--fix` auto-remediation, `explain`, and all output formats — are available without any account or license.
 
-| Command | Description |
-|---------|-------------|
-| `revet auth` | Open browser to sign in |
-| `revet auth --key <KEY>` | Set license key manually |
-| `revet auth status` | Show current tier and features |
-| `revet auth logout` | Remove stored credentials |
+LLM-powered reasoning (`--ai`) is opt-in and uses your own API key. Set it in `.revet.toml` or via environment variable:
 
-**Free tier** includes: all deterministic features — code graph, cross-file impact analysis, all analyzers (security, ML, infra, React, async, dependency, error handling), custom rules, `--fix` auto-remediation, `explain`, and all output formats.
-
-**Pro tier** adds: LLM-powered reasoning with `--ai` (coming soon).
-
-**Team tier** adds: shared config, GitHub Action PR comments, and dashboard.
-
-License is cached locally at `~/.config/revet/license.json` (24h TTL). When the API is unreachable, the cached license is used as a grace period.
+```toml
+[ai]
+provider = "anthropic"          # or "openai"
+model = "claude-sonnet-4-20250514"
+api_key = "sk-..."              # or set ANTHROPIC_API_KEY env var
+```
 
 ## CI/CD
 

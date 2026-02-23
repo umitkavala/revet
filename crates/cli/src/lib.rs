@@ -1,15 +1,12 @@
 //! Revet CLI library — exposed for integration tests
 
 pub mod commands;
-pub mod license;
 pub mod output;
 #[allow(dead_code)]
 pub mod progress;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-
-pub use license::License;
 
 #[derive(Parser)]
 #[command(name = "revet")]
@@ -108,16 +105,6 @@ pub enum Commands {
         /// Don't clear screen between runs
         #[arg(long)]
         no_clear: bool,
-    },
-
-    /// Manage license and authentication
-    Auth {
-        #[command(subcommand)]
-        action: Option<commands::auth::AuthAction>,
-
-        /// Set license key directly
-        #[arg(long)]
-        key: Option<String>,
     },
 }
 

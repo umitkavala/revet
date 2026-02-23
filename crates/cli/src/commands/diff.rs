@@ -9,14 +9,12 @@ use revet_core::{
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use crate::license::{self, License};
-
 use super::review::{
     build_summary, has_extension, has_filename, print_github, print_json, print_no_files,
     print_sarif, print_terminal, resolve_format, Format, ReviewExitCode,
 };
 
-pub fn run(base: &str, cli: &crate::Cli, lic: &License) -> Result<ReviewExitCode> {
+pub fn run(base: &str, cli: &crate::Cli) -> Result<ReviewExitCode> {
     let start = Instant::now();
     let repo_path = std::fs::canonicalize(Path::new(".")).unwrap_or_else(|_| PathBuf::from("."));
 
@@ -32,8 +30,7 @@ pub fn run(base: &str, cli: &crate::Cli, lic: &License) -> Result<ReviewExitCode
     eprintln!();
 
     // ── 1. Config ────────────────────────────────────────────────
-    let mut config = RevetConfig::find_and_load(&repo_path)?;
-    license::gate::apply_license_gates(&mut config, lic);
+    let config = RevetConfig::find_and_load(&repo_path)?;
     let format = resolve_format(cli, &config);
 
     // ── 2. Diff discovery ────────────────────────────────────────

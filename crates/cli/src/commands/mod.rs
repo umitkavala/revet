@@ -1,6 +1,5 @@
 //! CLI commands
 
-pub mod auth;
 pub mod baseline;
 pub mod diff;
 pub mod explain;
