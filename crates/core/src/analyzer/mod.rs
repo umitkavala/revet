@@ -6,7 +6,9 @@
 
 pub mod async_patterns;
 pub mod circular_imports;
+pub mod complexity;
 pub mod custom_rules;
+pub mod dead_imports;
 pub mod dependency;
 pub mod error_handling;
 pub mod infra;
@@ -92,6 +94,8 @@ impl AnalyzerDispatcher {
             graph_analyzers: vec![
                 Box::new(unused_exports::UnusedExportsAnalyzer::new()),
                 Box::new(circular_imports::CircularImportsAnalyzer::new()),
+                Box::new(complexity::ComplexityAnalyzer::new()),
+                Box::new(dead_imports::DeadImportsAnalyzer::new()),
             ],
         }
     }

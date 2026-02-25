@@ -117,6 +117,14 @@ pub struct ModulesConfig {
     #[serde(default = "default_true")]
     pub cycles: bool,
 
+    /// Detect overly complex functions: length, parameter count, cyclomatic complexity, nesting
+    #[serde(default)]
+    pub complexity: bool,
+
+    /// Detect imported symbols that are never used within the same file
+    #[serde(default)]
+    pub dead_imports: bool,
+
     /// Module-specific configurations
     #[serde(flatten)]
     pub module_configs: HashMap<String, toml::Value>,
@@ -249,6 +257,8 @@ impl Default for ModulesConfig {
             error_handling: false,
             dead_code: false,
             cycles: true,
+            complexity: false,
+            dead_imports: false,
             module_configs: HashMap::new(),
         }
     }
