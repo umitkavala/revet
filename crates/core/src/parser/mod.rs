@@ -1,5 +1,6 @@
 //! Language parsers for building the code graph from source files
 
+pub mod c;
 pub mod csharp;
 pub mod go;
 pub mod java;
@@ -142,6 +143,7 @@ impl ParserDispatcher {
     pub fn new() -> Self {
         Self {
             parsers: vec![
+                Box::new(c::CParser::new()),
                 Box::new(csharp::CSharpParser::new()),
                 Box::new(go::GoParser::new()),
                 Box::new(java::JavaParser::new()),
