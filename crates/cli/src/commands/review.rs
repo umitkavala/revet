@@ -185,19 +185,25 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
     // ── 4c. AI reasoning ─────────────────────────────────────────
     if cli.ai {
-        eprint!("  Running AI reasoning... ");
+        let eligible = findings
+            .iter()
+            .filter(|f| {
+                matches!(f.severity, Severity::Warning | Severity::Error) && f.suggestion.is_none()
+            })
+            .count();
+        eprintln!("  Running AI reasoning ({} findings)...", eligible);
         let ai_start = Instant::now();
         let reasoner = AiReasoner::new(config.ai.clone(), cli.max_cost);
         match reasoner.enrich(&mut findings, &repo_path) {
             Ok(stats) => eprintln!(
-                "{} — {} enriched, {} likely false positives (${:.4}, {:.1}s)",
-                "done".green(),
+                "  {} — {} enriched, {} likely false positives (${:.4}, {:.1}s)",
+                "AI done".green(),
                 stats.findings_enriched,
                 stats.false_positives,
                 stats.cost_usd,
                 ai_start.elapsed().as_secs_f64()
             ),
-            Err(e) => eprintln!("{}: {}", "warn".yellow(), e),
+            Err(e) => eprintln!("  {}: {}", "AI warn".yellow(), e),
         }
     }
 
