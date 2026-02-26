@@ -9,13 +9,13 @@ use revet_core::{
     Finding, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore, ImpactAnalysis,
     ParserDispatcher, RevetConfig, ReviewSummary, Severity,
 };
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
 use crate::ai::AiReasoner;
 use crate::output;
 use crate::output::github_comment;
+use crate::progress::Step;
 
 /// Exit status from the review command
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,8 +64,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     }
 
     // ── 3. Parse (incremental, cache-aware) ──────────────────────
-    eprint!("  Building code graph... ");
-    let _ = std::io::stderr().flush();
+    let step = Step::new("Building code graph");
     let graph_start = Instant::now();
 
     let file_cache = FileGraphCache::new(&repo_path);
@@ -73,15 +72,14 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         dispatcher.parse_files_incremental(&files, repo_path.clone(), &file_cache);
 
     let node_count: usize = graph.nodes().count();
-    eprintln!(
-        "{} — {} files ({} cached, {} parsed), {} nodes ({:.1}s)",
-        "done".green(),
+    step.finish(&format!(
+        "{} files ({} cached, {} parsed), {} nodes ({:.1}s)",
         files.len(),
         cached_count,
         parsed_count,
         node_count,
         graph_start.elapsed().as_secs_f64()
-    );
+    ));
 
     // ── 4. Impact Analysis ───────────────────────────────────────
     let mut findings: Vec<Finding> = Vec::new();
@@ -89,8 +87,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     let old_graph = load_old_graph(&repo_path, cli, &config, &dispatcher);
 
     if let Some(baseline) = old_graph {
-        eprint!("  Running impact analysis... ");
-        let _ = std::io::stderr().flush();
+        let step = Step::new("Running impact analysis");
         let impact_start = Instant::now();
 
         let analysis = ImpactAnalysis::new(baseline, graph.clone());
@@ -130,16 +127,11 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
             });
         }
 
-        eprintln!(
-            "{} ({:.1}s)",
-            "done".green(),
+        step.finish(&format!(
+            "{} impact finding(s) ({:.1}s)",
+            findings.len(),
             impact_start.elapsed().as_secs_f64()
-        );
-    } else {
-        eprintln!(
-            "  {} — run again to compare changes",
-            "No baseline graph available, skipping impact analysis".dimmed()
-        );
+        ));
     }
 
     // Add parse errors as findings
@@ -158,32 +150,28 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     }
 
     // ── 4b. Domain Analyzers ─────────────────────────────────────
-    eprint!("  Running domain analyzers... ");
-    let _ = std::io::stderr().flush();
+    let step = Step::new("Running domain analyzers");
     let analyzer_start = Instant::now();
     let analyzer_findings = analyzer_dispatcher.run_all_parallel(&files, &repo_path, &config);
     let analyzer_count = analyzer_findings.len();
     findings.extend(analyzer_findings);
-    eprintln!(
-        "{} — {} finding(s) ({:.1}s)",
-        "done".green(),
+    step.finish(&format!(
+        "{} finding(s) ({:.1}s)",
         analyzer_count,
         analyzer_start.elapsed().as_secs_f64()
-    );
+    ));
 
     // ── 4b'. Graph analyzers ─────────────────────────────────────────
-    eprint!("  Running graph analyzers... ");
-    let _ = std::io::stderr().flush();
+    let step = Step::new("Running graph analyzers");
     let ga_start = Instant::now();
     let graph_findings = analyzer_dispatcher.run_graph_analyzers(&graph, &config);
     let graph_count = graph_findings.len();
     findings.extend(graph_findings);
-    eprintln!(
-        "{} — {} finding(s) ({:.1}s)",
-        "done".green(),
+    step.finish(&format!(
+        "{} finding(s) ({:.1}s)",
         graph_count,
         ga_start.elapsed().as_secs_f64()
-    );
+    ));
 
     // ── 4c. AI reasoning ─────────────────────────────────────────
     if cli.ai {
@@ -193,35 +181,30 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
                 matches!(f.severity, Severity::Warning | Severity::Error) && f.suggestion.is_none()
             })
             .count();
-        eprint!("  Running AI reasoning ({} findings)... ", eligible);
-        let _ = std::io::stderr().flush();
+        let step = Step::new(format!("Running AI reasoning ({} findings)", eligible));
         let ai_start = Instant::now();
         let reasoner = AiReasoner::new(config.ai.clone(), cli.max_cost);
         match reasoner.enrich(&mut findings, &repo_path) {
-            Ok(stats) => eprintln!(
-                "{} — {} enriched, {} false positives (${:.4}, {:.1}s)",
-                "done".green(),
+            Ok(stats) => step.finish(&format!(
+                "{} enriched, {} false positives (${:.4}, {:.1}s)",
                 stats.findings_enriched,
                 stats.false_positives,
                 stats.cost_usd,
                 ai_start.elapsed().as_secs_f64()
-            ),
-            Err(e) => eprintln!("{}: {}", "warn".yellow(), e),
+            )),
+            Err(e) => step.warn(e),
         }
     }
 
     // ── 4d. Apply fixes ───────────────────────────────────────────
     if cli.fix {
-        eprint!("  Applying fixes... ");
-        let _ = std::io::stderr().flush();
+        let step = Step::new("Applying fixes");
         match apply_fixes(&findings) {
-            Ok(report) => eprintln!(
-                "{} ({} applied, {} suggestion-only)",
-                "done".green(),
-                report.applied,
-                report.skipped
-            ),
-            Err(e) => eprintln!("{}: {}", "failed".red(), e),
+            Ok(report) => step.finish(&format!(
+                "{} applied, {} suggestion-only",
+                report.applied, report.skipped
+            )),
+            Err(e) => step.warn(format!("failed: {}", e)),
         }
     }
 
@@ -322,81 +305,79 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
 /// Load the old (baseline) graph for impact analysis.
 ///
-/// Fallback chain: CozoStore → git blobs → None
+/// Tries: msgpack cache → CozoStore → git blobs → None.
+/// A single spinner covers all attempts; its message is updated between tries.
 fn load_old_graph(
     repo_path: &Path,
     cli: &crate::Cli,
     config: &RevetConfig,
     dispatcher: &ParserDispatcher,
 ) -> Option<CodeGraph> {
+    let step = Step::new("Loading baseline graph");
+    let baseline_start = Instant::now();
+
     // 1. Try msgpack cache (fast path — serialized whole graph)
     let cache = GraphCache::new(repo_path);
-    eprint!("  Loading baseline graph from cache... ");
-    let _ = std::io::stderr().flush();
-    let baseline_start = Instant::now();
     match cache.load() {
         Ok(Some((cached_graph, _))) => {
-            eprintln!(
-                "{} ({} nodes, {:.1}s)",
-                "done".green(),
+            step.finish(&format!(
+                "{} nodes from cache ({:.1}s)",
                 cached_graph.nodes().count(),
                 baseline_start.elapsed().as_secs_f64()
-            );
+            ));
             return Some(cached_graph);
         }
-        Ok(None) => eprintln!("{}", "not found — will build from git".dimmed()),
-        Err(e) => eprintln!("{}: {}", "warn".yellow(), e),
+        Ok(None) => {} // not found — try next source
+        Err(e) => step.warn(e),
     }
 
     // 2. Try CozoStore (slower fallback)
     if let Ok(store) = create_store(repo_path) {
         let snaps = store.snapshots().unwrap_or_default();
         if snaps.iter().any(|s| s.name == "cached") {
-            eprint!("  Loading baseline graph from store... ");
-            let _ = std::io::stderr().flush();
-            let baseline_start = Instant::now();
+            step.update("Loading baseline graph from store...");
             match reconstruct_graph(&store, "cached", repo_path) {
                 Ok(graph) => {
-                    eprintln!(
-                        "{} ({} nodes, {:.1}s)",
-                        "done".green(),
+                    step.finish(&format!(
+                        "{} nodes from store ({:.1}s)",
                         graph.nodes().count(),
                         baseline_start.elapsed().as_secs_f64()
-                    );
+                    ));
                     return Some(graph);
                 }
-                Err(e) => {
-                    eprintln!("{}: {}", "warn".yellow(), e);
-                }
+                Err(e) => step.warn(e),
             }
         }
     }
 
-    // 2. Try building from git blobs at the base ref
+    // 3. Try building from git blobs at the base ref
     let base = cli.diff.as_deref().unwrap_or(&config.general.diff_base);
     match GitTreeReader::new(repo_path) {
         Ok(reader) => {
-            eprint!("  Building baseline graph from git ({})... ", base);
-            let _ = std::io::stderr().flush();
-            let baseline_start = Instant::now();
+            step.update(format!("Building baseline graph from git ({})...", base));
             match reader.build_graph_at_ref(base, repo_path, dispatcher) {
                 Ok(blob_graph) => {
                     let node_count: usize = blob_graph.nodes().count();
-                    eprintln!(
-                        "{} ({} nodes, {:.1}s)",
-                        "done".green(),
+                    step.finish(&format!(
+                        "{} nodes from git ({:.1}s)",
                         node_count,
                         baseline_start.elapsed().as_secs_f64()
-                    );
+                    ));
                     Some(blob_graph)
                 }
                 Err(e) => {
-                    eprintln!("{}", format!("failed: {}", e).dimmed());
+                    step.skip(&format!(
+                        "No baseline available ({}), skipping impact analysis",
+                        e
+                    ));
                     None
                 }
             }
         }
-        Err(_) => None,
+        Err(_) => {
+            step.skip("No baseline graph available — run again to compare changes");
+            None
+        }
     }
 }
 
@@ -441,7 +422,7 @@ fn discover_review_files(
 
     match DiffAnalyzer::new(repo_path) {
         Ok(analyzer) => {
-            eprint!("  Discovering changed files (diff vs {})... ", base);
+            let step = Step::new(format!("Discovering changed files (diff vs {})", base));
             match analyzer.get_diff(base, None) {
                 Ok(diff) => {
                     let changed = analyzer.get_changed_files(&diff)?;
@@ -459,33 +440,26 @@ fn discover_review_files(
                             }
                         })
                         .collect();
-                    eprintln!("{} ({} files)", "done".green(), files.len());
 
                     if files.is_empty() {
-                        eprintln!(
-                            "  {} — falling back to full scan",
-                            "No supported changed files".dimmed()
-                        );
+                        step.skip("No supported changed files — falling back to full scan");
                         return full_scan(repo_path, all_extensions, extra_filenames, config);
                     }
 
+                    step.finish(&format!("{} files", files.len()));
                     Ok(files)
                 }
                 Err(_) => {
-                    eprintln!(
-                        "{}",
-                        format!(
-                            "  Could not diff against '{}', falling back to full scan",
-                            base
-                        )
-                        .dimmed()
-                    );
+                    step.skip(&format!(
+                        "Could not diff against '{}' — falling back to full scan",
+                        base
+                    ));
                     full_scan(repo_path, all_extensions, extra_filenames, config)
                 }
             }
         }
         Err(_) => {
-            eprintln!("  {} — running full scan", "Not a git repository".dimmed());
+            eprintln!("  {}", "Not a git repository — running full scan".dimmed());
             full_scan(repo_path, all_extensions, extra_filenames, config)
         }
     }
@@ -497,14 +471,13 @@ fn full_scan(
     filenames: &[&str],
     config: &RevetConfig,
 ) -> Result<Vec<PathBuf>> {
-    eprint!("  Discovering files (full scan)... ");
-    let _ = std::io::stderr().flush();
+    let step = Step::new("Discovering files (full scan)");
     let files = if filenames.is_empty() {
         discover_files(repo_path, extensions, &config.ignore.paths)?
     } else {
         discover_files_extended(repo_path, extensions, filenames, &config.ignore.paths)?
     };
-    eprintln!("{} ({} files)", "done".green(), files.len());
+    step.finish(&format!("{} files", files.len()));
     Ok(files)
 }
 
@@ -711,28 +684,21 @@ fn post_github_comments(findings: &[Finding], repo_path: &Path, cli: &crate::Cli
         Err(_) => findings.to_vec(), // not a git repo or no diff — post all
     };
 
-    eprint!(
-        "  Posting {} finding(s) to GitHub PR #{}... ",
+    let step = Step::new(format!(
+        "Posting {} finding(s) to GitHub PR #{}",
         diff_findings.len(),
         ctx.pr_number
-    );
-    let _ = std::io::stderr().flush();
+    ));
 
     match github_comment::post_review_comments(&diff_findings, repo_path, &ctx) {
         Ok((posted, off_diff, dupes)) => {
-            eprintln!("{}", "done".green());
-            if posted > 0 {
-                eprintln!("  {} new comment(s) posted", posted);
-            }
-            if dupes > 0 {
-                eprintln!("  {} duplicate(s) skipped", dupes);
-            }
-            if off_diff > 0 {
-                eprintln!("  {} finding(s) skipped (no line info)", off_diff);
-            }
+            step.finish(&format!(
+                "{} posted, {} duplicate(s) skipped, {} off-diff skipped",
+                posted, dupes, off_diff
+            ));
         }
         Err(e) => {
-            eprintln!("{}: {}", "failed".red(), e);
+            step.warn(format!("failed: {}", e));
         }
     }
 }
