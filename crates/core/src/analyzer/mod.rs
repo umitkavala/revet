@@ -16,6 +16,7 @@ pub mod ml_pipeline;
 pub mod react_hooks;
 pub mod secret_exposure;
 pub mod sql_injection;
+pub mod toolchain;
 pub mod unused_exports;
 
 use crate::config::RevetConfig;
@@ -90,6 +91,7 @@ impl AnalyzerDispatcher {
                 Box::new(async_patterns::AsyncPatternsAnalyzer::new()),
                 Box::new(dependency::DependencyAnalyzer::new()),
                 Box::new(error_handling::ErrorHandlingAnalyzer::new()),
+                Box::new(toolchain::ToolchainAnalyzer::new()),
             ],
             graph_analyzers: vec![
                 Box::new(unused_exports::UnusedExportsAnalyzer::new()),

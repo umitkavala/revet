@@ -125,6 +125,10 @@ pub struct ModulesConfig {
     #[serde(default)]
     pub dead_imports: bool,
 
+    /// Detect tools invoked in CI/scripts that are not declared in any manifest
+    #[serde(default)]
+    pub toolchain: bool,
+
     /// Module-specific configurations
     #[serde(flatten)]
     pub module_configs: HashMap<String, toml::Value>,
@@ -259,6 +263,7 @@ impl Default for ModulesConfig {
             cycles: true,
             complexity: false,
             dead_imports: false,
+            toolchain: false,
             module_configs: HashMap::new(),
         }
     }
