@@ -331,17 +331,21 @@ fn load_old_graph(
 ) -> Option<CodeGraph> {
     // 1. Try msgpack cache (fast path — serialized whole graph)
     let cache = GraphCache::new(repo_path);
-    if let Ok(Some((cached_graph, _))) = cache.load() {
-        eprint!("  Loading baseline graph from cache... ");
-        let _ = std::io::stderr().flush();
-        let baseline_start = Instant::now();
-        eprintln!(
-            "{} ({} nodes, {:.1}s)",
-            "done".green(),
-            cached_graph.nodes().count(),
-            baseline_start.elapsed().as_secs_f64()
-        );
-        return Some(cached_graph);
+    eprint!("  Loading baseline graph from cache... ");
+    let _ = std::io::stderr().flush();
+    let baseline_start = Instant::now();
+    match cache.load() {
+        Ok(Some((cached_graph, _))) => {
+            eprintln!(
+                "{} ({} nodes, {:.1}s)",
+                "done".green(),
+                cached_graph.nodes().count(),
+                baseline_start.elapsed().as_secs_f64()
+            );
+            return Some(cached_graph);
+        }
+        Ok(None) => eprintln!("{}", "not found — will build from git".dimmed()),
+        Err(e) => eprintln!("{}: {}", "warn".yellow(), e),
     }
 
     // 2. Try CozoStore (slower fallback)
