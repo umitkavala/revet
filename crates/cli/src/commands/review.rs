@@ -333,10 +333,15 @@ fn load_old_graph(
     if let Ok(store) = create_store(repo_path) {
         let snaps = store.snapshots().unwrap_or_default();
         if snaps.iter().any(|s| s.name == "cached") {
+            eprint!("  Loading baseline graph from cache... ");
+            let _ = std::io::stderr().flush();
             match reconstruct_graph(&store, "cached", repo_path) {
-                Ok(graph) => return Some(graph),
+                Ok(graph) => {
+                    eprintln!("{} ({} nodes)", "done".green(), graph.nodes().count());
+                    return Some(graph);
+                }
                 Err(e) => {
-                    eprintln!("  {}: failed to load from store: {}", "warn".yellow(), e);
+                    eprintln!("{}: {}", "warn".yellow(), e);
                 }
             }
         }
@@ -347,6 +352,7 @@ fn load_old_graph(
     match GitTreeReader::new(repo_path) {
         Ok(reader) => {
             eprint!("  Building baseline graph from git ({})... ", base);
+            let _ = std::io::stderr().flush();
             match reader.build_graph_at_ref(base, repo_path, dispatcher) {
                 Ok(blob_graph) => {
                     let node_count: usize = blob_graph.nodes().count();
