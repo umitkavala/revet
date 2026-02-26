@@ -1,5 +1,7 @@
 //! Terminal output formatting
 
+use colored::Colorize;
+
 pub fn format_finding(
     severity: &str,
     message: &str,
@@ -29,4 +31,28 @@ pub fn format_finding(
         out.push_str(&format!("\n     {}{}\x1b[0m", prefix, note));
     }
     out
+}
+
+/// Format a suppressed finding with a dimmed `[suppressed: reason]` tag.
+pub fn format_suppressed_finding(
+    severity: &str,
+    message: &str,
+    file: &str,
+    line: usize,
+    reason: &str,
+) -> String {
+    let icon = match severity {
+        "error" => "❌",
+        "warning" => "⚠️ ",
+        "info" => "ℹ️ ",
+        _ => "  ",
+    };
+    format!(
+        "  {} {} {}:{}\n     {}",
+        icon,
+        message.dimmed(),
+        file.dimmed(),
+        line,
+        format!("[suppressed: {}]", reason).dimmed()
+    )
 }

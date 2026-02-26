@@ -6,6 +6,7 @@ use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
 use revet_core::{
     apply_fixes, discover_files_extended, filter_findings, filter_findings_by_inline,
     AnalyzerDispatcher, Baseline, Finding, ParserDispatcher, RevetConfig, Severity,
+    SuppressedFinding,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -216,16 +217,18 @@ fn run_analysis(repo_path: &Path, cli: &crate::Cli) -> Result<()> {
     }
 
     // ── 6. Inline suppression ─────────────────────────────────
+    let mut all_suppressed: Vec<SuppressedFinding> = Vec::new();
     let (new_findings, inline_suppressed) = filter_findings_by_inline(findings);
     findings = new_findings;
+    all_suppressed.extend(inline_suppressed);
 
     // ── 7. Baseline suppression ───────────────────────────────
-    let mut suppressed_count = 0usize;
     if !cli.no_baseline {
         if let Some(baseline) = Baseline::load(repo_path)? {
-            let (new_findings, suppressed) = filter_findings(findings, &baseline, repo_path);
+            let (new_findings, baseline_suppressed) =
+                filter_findings(findings, &baseline, repo_path);
             findings = new_findings;
-            suppressed_count = suppressed;
+            all_suppressed.extend(baseline_suppressed);
         }
     }
 
@@ -241,8 +244,8 @@ fn run_analysis(repo_path: &Path, cli: &crate::Cli) -> Result<()> {
             &summary,
             repo_path,
             start,
-            suppressed_count,
-            inline_suppressed,
+            &all_suppressed,
+            cli.show_suppressed,
         ),
     }
 

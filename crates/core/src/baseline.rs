@@ -1,5 +1,6 @@
 //! Baseline/suppression — snapshot findings so only new ones are reported
 
+use crate::suppress::SuppressedFinding;
 use crate::Finding;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -96,12 +97,12 @@ impl Baseline {
 
 /// Filter findings against a baseline.
 ///
-/// Returns `(new_findings, suppressed_count)`.
+/// Returns `(new_findings, suppressed)`.
 pub fn filter_findings(
     findings: Vec<Finding>,
     baseline: &Baseline,
     repo_root: &Path,
-) -> (Vec<Finding>, usize) {
+) -> (Vec<Finding>, Vec<SuppressedFinding>) {
     let lookup: HashSet<(&str, &str)> = baseline
         .entries
         .iter()
@@ -109,7 +110,7 @@ pub fn filter_findings(
         .collect();
 
     let mut new_findings = Vec::new();
-    let mut suppressed = 0usize;
+    let mut suppressed: Vec<SuppressedFinding> = Vec::new();
 
     for f in findings {
         let rel = f
@@ -118,7 +119,10 @@ pub fn filter_findings(
             .unwrap_or(&f.file)
             .to_string_lossy();
         if lookup.contains(&(rel.as_ref(), f.message.as_str())) {
-            suppressed += 1;
+            suppressed.push(SuppressedFinding {
+                finding: f,
+                reason: "baseline".to_string(),
+            });
         } else {
             new_findings.push(f);
         }

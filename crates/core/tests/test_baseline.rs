@@ -72,7 +72,7 @@ fn test_filter_findings() {
     ];
 
     let (new, suppressed) = filter_findings(findings, &baseline, root);
-    assert_eq!(suppressed, 1);
+    assert_eq!(suppressed.len(), 1);
     assert_eq!(new.len(), 1);
     assert_eq!(new[0].message, "New finding");
 }
@@ -97,7 +97,7 @@ fn test_filter_empty_baseline() {
     )];
 
     let (new, suppressed) = filter_findings(findings, &baseline, root);
-    assert_eq!(suppressed, 0);
+    assert_eq!(suppressed.len(), 0);
     assert_eq!(new.len(), 1);
 }
 
@@ -142,7 +142,7 @@ fn test_fingerprint_ignores_line_number() {
     )];
 
     let (new, suppressed) = filter_findings(findings, &baseline, root);
-    assert_eq!(suppressed, 1);
+    assert_eq!(suppressed.len(), 1);
     assert_eq!(new.len(), 0);
 }
 
@@ -170,7 +170,7 @@ fn test_different_message_not_matched() {
     )];
 
     let (new, suppressed) = filter_findings(findings, &baseline, root);
-    assert_eq!(suppressed, 0);
+    assert_eq!(suppressed.len(), 0);
     assert_eq!(new.len(), 1);
 }
 

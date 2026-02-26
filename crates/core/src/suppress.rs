@@ -35,13 +35,21 @@ pub fn matches_suppression(finding_id: &str, prefixes: &[String]) -> bool {
     prefixes.iter().any(|p| p == "*" || p == finding_prefix)
 }
 
+/// A finding that was suppressed, paired with the reason for suppression.
+#[derive(Debug, Clone)]
+pub struct SuppressedFinding {
+    pub finding: Finding,
+    /// Human-readable suppression source: `"inline"`, `"per-path rule"`, `"baseline"`.
+    pub reason: String,
+}
+
 /// Filter findings by inline `revet-ignore` comments in source files.
 ///
 /// For each finding at line N, checks for suppression comments at line N
 /// (same-line) and line N-1 (line-before).
 ///
-/// Returns `(kept_findings, suppressed_count)`.
-pub fn filter_findings_by_inline(findings: Vec<Finding>) -> (Vec<Finding>, usize) {
+/// Returns `(kept_findings, suppressed)`.
+pub fn filter_findings_by_inline(findings: Vec<Finding>) -> (Vec<Finding>, Vec<SuppressedFinding>) {
     // Group findings by file to read each file only once
     let mut by_file: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, f) in findings.iter().enumerate() {
@@ -61,7 +69,7 @@ pub fn filter_findings_by_inline(findings: Vec<Finding>) -> (Vec<Finding>, usize
     }
 
     let mut kept = Vec::new();
-    let mut suppressed = 0usize;
+    let mut suppressed: Vec<SuppressedFinding> = Vec::new();
 
     for finding in findings {
         let key = finding.file.to_string_lossy().into_owned();
@@ -86,7 +94,10 @@ pub fn filter_findings_by_inline(findings: Vec<Finding>) -> (Vec<Finding>, usize
         };
 
         if is_suppressed {
-            suppressed += 1;
+            suppressed.push(SuppressedFinding {
+                finding,
+                reason: "inline".to_string(),
+            });
         } else {
             kept.push(finding);
         }
@@ -100,24 +111,28 @@ pub fn filter_findings_by_inline(findings: Vec<Finding>) -> (Vec<Finding>, usize
 /// `per_path` maps glob patterns (e.g. `"**/tests/**"`) to lists of finding
 /// ID prefixes (e.g. `["SEC", "SQL"]` or `["*"]` for all).
 ///
-/// Returns `(kept_findings, suppressed_count)`.
+/// Returns `(kept_findings, suppressed)`.
 pub fn filter_findings_by_path_rules(
     findings: Vec<Finding>,
     per_path: &std::collections::HashMap<String, Vec<String>>,
     repo_root: &std::path::Path,
-) -> (Vec<Finding>, usize) {
+) -> (Vec<Finding>, Vec<SuppressedFinding>) {
     if per_path.is_empty() {
-        return (findings, 0);
+        return (findings, vec![]);
     }
 
-    // Pre-compile glob patterns
-    let rules: Vec<(glob::Pattern, &Vec<String>)> = per_path
+    // Pre-compile glob patterns (keep original pattern string for the reason)
+    let rules: Vec<(glob::Pattern, &str, &Vec<String>)> = per_path
         .iter()
-        .filter_map(|(pattern, prefixes)| glob::Pattern::new(pattern).ok().map(|p| (p, prefixes)))
+        .filter_map(|(pattern, prefixes)| {
+            glob::Pattern::new(pattern)
+                .ok()
+                .map(|p| (p, pattern.as_str(), prefixes))
+        })
         .collect();
 
     let mut kept = Vec::new();
-    let mut suppressed = 0usize;
+    let mut suppressed: Vec<SuppressedFinding> = Vec::new();
 
     for finding in findings {
         // Match against the path relative to repo root for consistent glob behaviour
@@ -127,12 +142,15 @@ pub fn filter_findings_by_path_rules(
             .unwrap_or(&finding.file);
         let path_str = rel_path.to_string_lossy();
 
-        let is_suppressed = rules.iter().any(|(pattern, prefixes)| {
+        let matched = rules.iter().find(|(pattern, _, prefixes)| {
             pattern.matches(&path_str) && matches_suppression(&finding.id, prefixes)
         });
 
-        if is_suppressed {
-            suppressed += 1;
+        if let Some((_, pattern_str, _)) = matched {
+            suppressed.push(SuppressedFinding {
+                finding,
+                reason: format!("per-path rule: {}", pattern_str),
+            });
         } else {
             kept.push(finding);
         }

@@ -35,7 +35,7 @@ pub use parser::{LanguageParser, ParseError, ParseState, ParserDispatcher, Unres
 pub use store::{reconstruct_graph, GraphStore, MemoryStore, StoreNodeId};
 pub use suppress::{
     filter_findings_by_inline, filter_findings_by_path_rules, matches_suppression,
-    parse_suppressions,
+    parse_suppressions, SuppressedFinding,
 };
 
 #[cfg(feature = "cozo-store")]

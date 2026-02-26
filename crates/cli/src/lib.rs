@@ -5,6 +5,7 @@ pub mod commands;
 pub mod output;
 #[allow(dead_code)]
 pub mod progress;
+pub mod run_log;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -54,6 +55,10 @@ pub struct Cli {
     /// Ignore baseline — show all findings
     #[arg(long, global = true)]
     pub no_baseline: bool,
+
+    /// Include suppressed findings in output (marked [suppressed])
+    #[arg(long, global = true)]
+    pub show_suppressed: bool,
 
     /// Max cost for LLM calls in USD
     #[arg(long, global = true)]
@@ -112,6 +117,13 @@ pub enum Commands {
         /// Don't clear screen between runs
         #[arg(long)]
         no_clear: bool,
+    },
+
+    /// List past run logs or show a specific run
+    Log {
+        /// Show a specific run log by ID (timestamp)
+        #[arg(long)]
+        show: Option<String>,
     },
 }
 

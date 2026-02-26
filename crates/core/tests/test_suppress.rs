@@ -86,7 +86,7 @@ fn test_same_line_suppression() {
 
     let findings = vec![make_finding("SEC-001", path, 1)];
     let (kept, suppressed) = filter_findings_by_inline(findings);
-    assert_eq!(suppressed, 1);
+    assert_eq!(suppressed.len(), 1);
     assert!(kept.is_empty());
 }
 
@@ -99,7 +99,7 @@ fn test_line_before_suppression() {
 
     let findings = vec![make_finding("SEC-001", path, 2)];
     let (kept, suppressed) = filter_findings_by_inline(findings);
-    assert_eq!(suppressed, 1);
+    assert_eq!(suppressed.len(), 1);
     assert!(kept.is_empty());
 }
 
@@ -114,7 +114,7 @@ fn test_no_suppression_wrong_line() {
     // Finding on line 3, suppression on line 1 — too far away
     let findings = vec![make_finding("SEC-001", path, 3)];
     let (kept, suppressed) = filter_findings_by_inline(findings);
-    assert_eq!(suppressed, 0);
+    assert_eq!(suppressed.len(), 0);
     assert_eq!(kept.len(), 1);
 }
 
@@ -132,7 +132,7 @@ fn test_prefix_matching() {
         make_finding("SQL-001", path, 2), // should NOT be suppressed
     ];
     let (kept, suppressed) = filter_findings_by_inline(findings);
-    assert_eq!(suppressed, 2);
+    assert_eq!(suppressed.len(), 2);
     assert_eq!(kept.len(), 1);
     assert_eq!(kept[0].id, "SQL-001");
 }
@@ -150,7 +150,7 @@ fn test_wildcard_suppresses_all() {
         make_finding("ML-001", path, 2),
     ];
     let (kept, suppressed) = filter_findings_by_inline(findings);
-    assert_eq!(suppressed, 3);
+    assert_eq!(suppressed.len(), 3);
     assert!(kept.is_empty());
 }
 
@@ -167,7 +167,7 @@ fn test_multiple_prefixes_on_one_line() {
         make_finding("ML-001", path, 2), // should NOT be suppressed
     ];
     let (kept, suppressed) = filter_findings_by_inline(findings);
-    assert_eq!(suppressed, 2);
+    assert_eq!(suppressed.len(), 2);
     assert_eq!(kept.len(), 1);
     assert_eq!(kept[0].id, "ML-001");
 }
@@ -181,7 +181,7 @@ fn test_no_file_on_disk() {
         1,
     )];
     let (kept, suppressed) = filter_findings_by_inline(findings);
-    assert_eq!(suppressed, 0);
+    assert_eq!(suppressed.len(), 0);
     assert_eq!(kept.len(), 1);
 }
 
@@ -194,7 +194,7 @@ fn test_finding_on_line_1_no_crash() {
     // Line 1 finding — line-before check (line 0) should not panic
     let findings = vec![make_finding("SEC-001", path, 1)];
     let (kept, suppressed) = filter_findings_by_inline(findings);
-    assert_eq!(suppressed, 0);
+    assert_eq!(suppressed.len(), 0);
     assert_eq!(kept.len(), 1);
 }
 
@@ -212,7 +212,7 @@ fn test_mixed_suppressed_and_kept() {
         make_finding("SEC-002", path, 4),         // NOT suppressed (line 3 has no comment)
     ];
     let (kept, suppressed) = filter_findings_by_inline(findings);
-    assert_eq!(suppressed, 1);
+    assert_eq!(suppressed.len(), 1);
     assert_eq!(kept.len(), 1);
     assert_eq!(kept[0].id, "SEC-002");
 }
@@ -244,7 +244,7 @@ fn test_per_path_suppresses_matching_prefix() {
     ];
 
     let (kept, suppressed) = filter_findings_by_path_rules(findings, &per_path, root);
-    assert_eq!(suppressed, 2);
+    assert_eq!(suppressed.len(), 2);
     assert_eq!(kept.len(), 2);
     assert!(kept.iter().any(|f| f.id == "ML-001"));
     assert!(kept.iter().any(|f| f.id == "SEC-002"));
@@ -263,7 +263,7 @@ fn test_per_path_wildcard_suppresses_all() {
     ];
 
     let (kept, suppressed) = filter_findings_by_path_rules(findings, &per_path, root);
-    assert_eq!(suppressed, 2);
+    assert_eq!(suppressed.len(), 2);
     assert_eq!(kept.len(), 1);
     assert_eq!(kept[0].id, "SEC-002");
 }
@@ -280,7 +280,7 @@ fn test_per_path_empty_rules_no_change() {
     )];
 
     let (kept, suppressed) = filter_findings_by_path_rules(findings, &per_path, root);
-    assert_eq!(suppressed, 0);
+    assert_eq!(suppressed.len(), 0);
     assert_eq!(kept.len(), 1);
 }
 

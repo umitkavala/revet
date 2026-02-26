@@ -7,7 +7,7 @@ use revet_core::{
     filter_findings_by_diff, filter_findings_by_inline, filter_findings_by_path_rules,
     reconstruct_graph, AnalyzerDispatcher, Baseline, CodeGraph, DiffAnalyzer, FileGraphCache,
     Finding, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore, ImpactAnalysis,
-    ParserDispatcher, RevetConfig, ReviewSummary, Severity,
+    ParserDispatcher, RevetConfig, ReviewSummary, Severity, SuppressedFinding,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -16,6 +16,7 @@ use crate::ai::AiReasoner;
 use crate::output;
 use crate::output::github_comment;
 use crate::progress::Step;
+use crate::run_log;
 
 /// Exit status from the review command
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -209,29 +210,26 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     }
 
     // ── 4d. Inline suppression ───────────────────────────────────
+    let mut all_suppressed: Vec<SuppressedFinding> = Vec::new();
     let (new_findings, inline_suppressed) = filter_findings_by_inline(findings);
     findings = new_findings;
+    all_suppressed.extend(inline_suppressed);
 
     // ── 4e. Per-path rule suppression ────────────────────────────
     if !config.ignore.per_path.is_empty() {
         let (new_findings, path_suppressed) =
             filter_findings_by_path_rules(findings, &config.ignore.per_path, &repo_path);
         findings = new_findings;
-        if path_suppressed > 0 {
-            eprintln!(
-                "  {} finding(s) suppressed by per-path rules",
-                path_suppressed
-            );
-        }
+        all_suppressed.extend(path_suppressed);
     }
 
     // ── 4f. Baseline suppression ───────────────────────────────────
-    let mut suppressed_count = 0usize;
     if !cli.no_baseline {
         if let Some(baseline) = Baseline::load(&repo_path)? {
-            let (new_findings, suppressed) = filter_findings(findings, &baseline, &repo_path);
+            let (new_findings, baseline_suppressed) =
+                filter_findings(findings, &baseline, &repo_path);
             findings = new_findings;
-            suppressed_count = suppressed;
+            all_suppressed.extend(baseline_suppressed);
         }
     }
 
@@ -279,6 +277,20 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     // ── 6. Output ────────────────────────────────────────────────
     let summary = build_summary(&findings, files.len(), node_count);
 
+    // Write run log (best-effort — don't fail the review on log errors)
+    let run_id = run_log::new_run_id();
+    if let Err(e) = run_log::save_run_log(
+        &repo_path,
+        &run_id,
+        start.elapsed().as_secs_f64(),
+        &findings,
+        &all_suppressed,
+        &summary,
+        &repo_path,
+    ) {
+        eprintln!("  {}: failed to write run log: {}", "warn".yellow(), e);
+    }
+
     match format {
         Format::Json => print_json(&findings, &summary),
         Format::Sarif => print_sarif(&findings, &repo_path),
@@ -288,8 +300,8 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
             &summary,
             &repo_path,
             start,
-            suppressed_count,
-            inline_suppressed,
+            &all_suppressed,
+            cli.show_suppressed,
         ),
     }
 
@@ -525,12 +537,12 @@ pub(crate) fn print_terminal(
     summary: &ReviewSummary,
     repo_path: &Path,
     start: Instant,
-    suppressed_count: usize,
-    inline_suppressed: usize,
+    suppressed: &[SuppressedFinding],
+    show_suppressed: bool,
 ) {
     println!();
 
-    // Print findings
+    // Print active findings
     for f in findings {
         let display_path = f.file.strip_prefix(repo_path).unwrap_or(&f.file).display();
 
@@ -548,7 +560,32 @@ pub(crate) fn print_terminal(
         );
     }
 
-    if !findings.is_empty() {
+    // Optionally show suppressed findings
+    if show_suppressed && !suppressed.is_empty() {
+        if !findings.is_empty() {
+            println!();
+        }
+        for sf in suppressed {
+            let display_path = sf
+                .finding
+                .file
+                .strip_prefix(repo_path)
+                .unwrap_or(&sf.finding.file)
+                .display();
+            println!(
+                "{}",
+                output::terminal::format_suppressed_finding(
+                    &sf.finding.severity.to_string(),
+                    &sf.finding.message,
+                    &display_path.to_string(),
+                    sf.finding.line,
+                    &sf.reason,
+                )
+            );
+        }
+    }
+
+    if !findings.is_empty() || (show_suppressed && !suppressed.is_empty()) {
         println!();
     }
 
@@ -559,17 +596,33 @@ pub(crate) fn print_terminal(
         format!("{} warning(s)", summary.warnings).yellow(),
         format!("{} info", summary.info).blue()
     );
-    if suppressed_count > 0 || inline_suppressed > 0 {
+    if !suppressed.is_empty() {
+        // Group by reason for a readable summary
+        let baseline = suppressed.iter().filter(|s| s.reason == "baseline").count();
+        let inline = suppressed.iter().filter(|s| s.reason == "inline").count();
+        let per_path = suppressed
+            .iter()
+            .filter(|s| s.reason.starts_with("per-path"))
+            .count();
+
         let mut parts = Vec::new();
-        if suppressed_count > 0 {
-            parts.push(format!("{} baselined", suppressed_count));
+        if baseline > 0 {
+            parts.push(format!("{} baselined", baseline));
         }
-        if inline_suppressed > 0 {
-            parts.push(format!("{} inline", inline_suppressed));
+        if inline > 0 {
+            parts.push(format!("{} inline", inline));
+        }
+        if per_path > 0 {
+            parts.push(format!("{} per-path", per_path));
         }
         println!(
             "  {}",
-            format!("{} finding(s) suppressed", parts.join(" + ")).dimmed()
+            format!(
+                "{} finding(s) suppressed ({})",
+                suppressed.len(),
+                parts.join(", ")
+            )
+            .dimmed()
         );
     }
     println!(

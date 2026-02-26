@@ -36,6 +36,9 @@ fn main() -> Result<()> {
         }) => {
             commands::watch::run(path.as_deref(), &cli, debounce, no_clear)?;
         }
+        Some(Commands::Log { ref show }) => {
+            commands::log::run(std::path::Path::new("."), show.as_deref())?;
+        }
         None => {
             let exit_code = commands::review::run(None, &cli)?;
             if exit_code == commands::review::ReviewExitCode::FindingsExceedThreshold {

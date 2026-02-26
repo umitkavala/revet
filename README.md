@@ -10,9 +10,12 @@ Revet combines deterministic static analysis with selective LLM reasoning. It bu
 
 ```bash
 cargo install revet
-revet init         # create .revet.toml
-revet review       # review changes vs main
-revet review --full .  # full repo scan
+revet init                     # create .revet.toml
+revet review                   # review changes vs main
+revet review --full .          # full repo scan
+revet review --show-suppressed # include suppressed findings in output
+revet log                      # list past review runs
+revet log --show <id>          # dump a specific run as JSON
 ```
 
 ## What Makes Revet Different
