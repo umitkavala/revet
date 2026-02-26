@@ -59,8 +59,12 @@ coverage.xml
 
 # Node
 node_modules/
-package-lock.json
 yarn.lock
+# keep docs/package-lock.json for npm ci in CI
+
+# Docusaurus build output
+docs/build/
+docs/.docusaurus/
 
 # npm platform binaries (built by scripts/build-npm.sh)
 npm/@revet/*/bin/
