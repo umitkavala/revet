@@ -44,6 +44,12 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub fix: bool,
 
+    /// Post findings as inline GitHub PR review comments via GitHub API.
+    /// Reads GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_PR_NUMBER, GITHUB_SHA
+    /// from the environment (all set automatically by GitHub Actions).
+    #[arg(long, global = true)]
+    pub post_comment: bool,
+
     /// Ignore baseline — show all findings
     #[arg(long, global = true)]
     pub no_baseline: bool,

@@ -4,14 +4,15 @@ use anyhow::Result;
 use colored::Colorize;
 use revet_core::{
     apply_fixes, create_store, discover_files, discover_files_extended, filter_findings,
-    filter_findings_by_inline, reconstruct_graph, AnalyzerDispatcher, Baseline, CodeGraph,
-    DiffAnalyzer, Finding, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore, ImpactAnalysis,
-    ParserDispatcher, RevetConfig, ReviewSummary, Severity,
+    filter_findings_by_diff, filter_findings_by_inline, reconstruct_graph, AnalyzerDispatcher,
+    Baseline, CodeGraph, DiffAnalyzer, Finding, GitTreeReader, GraphCache, GraphCacheMeta,
+    GraphStore, ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary, Severity,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
 use crate::output;
+use crate::output::github_comment;
 
 /// Exit status from the review command
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -236,6 +237,11 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     let cache = GraphCache::new(&repo_path);
     if let Err(e) = cache.save_meta(&meta) {
         eprintln!("  {}: failed to save metadata: {}", "warn".yellow(), e);
+    }
+
+    // ── 5b. Post GitHub PR comments ──────────────────────────────
+    if cli.post_comment {
+        post_github_comments(&findings, &repo_path, cli);
     }
 
     // ── 6. Output ────────────────────────────────────────────────
@@ -580,5 +586,63 @@ pub(crate) fn print_no_files(format: Format, start: Instant) {
 pub(crate) fn print_github(findings: &[Finding], repo_path: &Path) {
     for f in findings {
         println!("{}", output::github::format_finding(f, repo_path));
+    }
+}
+
+/// Post findings as inline GitHub PR review comments.
+///
+/// Filters to diff-only findings, deduplicates against existing comments,
+/// and logs a summary. Exits gracefully if GitHub context is not available.
+fn post_github_comments(findings: &[Finding], repo_path: &Path, cli: &crate::Cli) {
+    let ctx = match github_comment::GitHubContext::from_env() {
+        Some(c) => c,
+        None => {
+            eprintln!(
+                "  {}: --post-comment requires GITHUB_TOKEN, GITHUB_REPOSITORY, \
+                 GITHUB_PR_NUMBER and GITHUB_SHA environment variables",
+                "warn".yellow()
+            );
+            return;
+        }
+    };
+
+    // Filter to only findings on changed lines
+    let diff_findings = match DiffAnalyzer::new(repo_path) {
+        Ok(analyzer) => {
+            let base = cli.diff.as_deref().unwrap_or("main");
+            match analyzer.get_all_changed_lines(base) {
+                Ok(diff_map) => {
+                    let (kept, _) =
+                        filter_findings_by_diff(findings.to_vec(), &diff_map, repo_path);
+                    kept
+                }
+                Err(_) => findings.to_vec(), // fallback: post all findings
+            }
+        }
+        Err(_) => findings.to_vec(), // not a git repo or no diff — post all
+    };
+
+    eprint!(
+        "  Posting {} finding(s) to GitHub PR #{}... ",
+        diff_findings.len(),
+        ctx.pr_number
+    );
+
+    match github_comment::post_review_comments(&diff_findings, repo_path, &ctx) {
+        Ok((posted, off_diff, dupes)) => {
+            eprintln!("{}", "done".green());
+            if posted > 0 {
+                eprintln!("  {} new comment(s) posted", posted);
+            }
+            if dupes > 0 {
+                eprintln!("  {} duplicate(s) skipped", dupes);
+            }
+            if off_diff > 0 {
+                eprintln!("  {} finding(s) skipped (no line info)", off_diff);
+            }
+        }
+        Err(e) => {
+            eprintln!("{}: {}", "failed".red(), e);
+        }
     }
 }
