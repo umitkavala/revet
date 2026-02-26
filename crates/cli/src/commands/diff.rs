@@ -189,6 +189,7 @@ pub fn run(base: &str, cli: &crate::Cli) -> Result<ReviewExitCode> {
                 start,
                 &all_suppressed,
                 cli.show_suppressed,
+                None,
             );
             if diff_filtered > 0 {
                 println!(

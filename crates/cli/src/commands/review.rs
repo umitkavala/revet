@@ -279,7 +279,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
     // Write run log (best-effort — don't fail the review on log errors)
     let run_id = run_log::new_run_id();
-    if let Err(e) = run_log::save_run_log(
+    let run_log_saved = run_log::save_run_log(
         &repo_path,
         &run_id,
         start.elapsed().as_secs_f64(),
@@ -287,9 +287,8 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         &all_suppressed,
         &summary,
         &repo_path,
-    ) {
-        eprintln!("  {}: failed to write run log: {}", "warn".yellow(), e);
-    }
+    )
+    .is_ok();
 
     match format {
         Format::Json => print_json(&findings, &summary),
@@ -302,6 +301,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
             start,
             &all_suppressed,
             cli.show_suppressed,
+            if run_log_saved { Some(&run_id) } else { None },
         ),
     }
 
@@ -539,6 +539,7 @@ pub(crate) fn print_terminal(
     start: Instant,
     suppressed: &[SuppressedFinding],
     show_suppressed: bool,
+    run_id: Option<&str>,
 ) {
     println!();
 
@@ -630,6 +631,9 @@ pub(crate) fn print_terminal(
         summary.files_analyzed, summary.nodes_parsed
     );
     println!("  Time: {:.1}s", start.elapsed().as_secs_f64());
+    if let Some(id) = run_id {
+        println!("  {}", format!("Run log: revet log --show {}", id).dimmed());
+    }
 }
 
 pub(crate) fn print_json(findings: &[Finding], summary: &ReviewSummary) {

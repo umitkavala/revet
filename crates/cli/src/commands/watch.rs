@@ -246,6 +246,7 @@ fn run_analysis(repo_path: &Path, cli: &crate::Cli) -> Result<()> {
             start,
             &all_suppressed,
             cli.show_suppressed,
+            None,
         ),
     }
 
