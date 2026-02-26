@@ -1,6 +1,7 @@
 //! Graph caching for incremental analysis
 
 use crate::graph::CodeGraph;
+use crate::parser::ParseState;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -184,7 +185,10 @@ impl GraphCache {
         Ok(changed_files)
     }
 
-    /// Check if the cache is valid for the current repository state
+    /// Check if the cache is valid for the current repository state.
+    ///
+    /// Returns `true` only when the revet version, git commit, and all file
+    /// checksums are unchanged — i.e. a full re-parse can be skipped entirely.
     pub fn is_cache_valid(&self, meta: &GraphCacheMeta) -> Result<bool> {
         // Check if revet version matches
         let current_version = env!("CARGO_PKG_VERSION");
@@ -206,5 +210,68 @@ impl GraphCache {
         // Check if any files have changed
         let changed_files = self.find_changed_files(meta)?;
         Ok(changed_files.is_empty())
+    }
+}
+
+// ── Per-file graph fragment cache ────────────────────────────────────────────
+
+/// Serialized payload for a single file's parse result.
+#[derive(Serialize, Deserialize)]
+struct FileFragment {
+    graph: CodeGraph,
+    state: ParseState,
+}
+
+/// Cache for per-file `(CodeGraph, ParseState)` fragments.
+///
+/// Each entry is keyed by the hex content-hash of the source file and stored
+/// as a msgpack file in `.revet-cache/files/`. On a subsequent run, unchanged
+/// files are loaded from cache instead of being re-parsed by tree-sitter,
+/// giving near-instant re-runs for large repos where only a few files changed.
+pub struct FileGraphCache {
+    cache_dir: PathBuf,
+}
+
+impl FileGraphCache {
+    /// Create a file graph cache rooted at `<repo_root>/.revet-cache/files/`.
+    pub fn new(repo_root: &Path) -> Self {
+        Self {
+            cache_dir: repo_root.join(".revet-cache").join("files"),
+        }
+    }
+
+    fn ensure_dir(&self) -> Result<()> {
+        std::fs::create_dir_all(&self.cache_dir)
+            .context("Failed to create file graph cache directory")?;
+        Ok(())
+    }
+
+    fn path_for(&self, content_hash: &str) -> PathBuf {
+        self.cache_dir.join(format!("{}.msgpack", content_hash))
+    }
+
+    /// Load a cached `(CodeGraph, ParseState)` for a file with the given
+    /// content hash. Returns `None` on any miss or deserialization failure
+    /// so callers always fall back to a fresh parse.
+    pub fn load(&self, content_hash: &str) -> Option<(CodeGraph, ParseState)> {
+        let path = self.path_for(content_hash);
+        let bytes = std::fs::read(&path).ok()?;
+        let fragment: FileFragment = rmp_serde::from_slice(&bytes).ok()?;
+        Some((fragment.graph, fragment.state))
+    }
+
+    /// Persist a `(CodeGraph, ParseState)` fragment keyed by content hash.
+    /// Failures are silently ignored — caching is best-effort.
+    pub fn save(&self, content_hash: &str, graph: &CodeGraph, state: &ParseState) {
+        if self.ensure_dir().is_err() {
+            return;
+        }
+        let fragment = FileFragment {
+            graph: graph.clone(),
+            state: state.clone(),
+        };
+        if let Ok(bytes) = rmp_serde::to_vec(&fragment) {
+            let _ = std::fs::write(self.path_for(content_hash), bytes);
+        }
     }
 }

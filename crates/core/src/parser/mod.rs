@@ -15,6 +15,7 @@ pub mod typescript;
 
 use crate::graph::{CodeGraph, EdgeKind, NodeData, NodeId, NodeKind};
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -38,7 +39,7 @@ pub enum ParseError {
 }
 
 /// An import statement recorded during parsing, before cross-file resolution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnresolvedImport {
     /// NodeId of the Import node in the (merged) graph
     pub import_node_id: NodeId,
@@ -55,7 +56,7 @@ pub struct UnresolvedImport {
 }
 
 /// A cross-file function call recorded during parsing, before resolution.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnresolvedCall {
     /// NodeId of the calling function node
     pub caller_node_id: NodeId,
@@ -74,7 +75,7 @@ pub struct UnresolvedCall {
 /// Used by [`CrossFileResolver`] after all files have been merged to add
 /// cross-file [`EdgeKind::Imports`], [`EdgeKind::References`], and
 /// [`EdgeKind::Calls`] edges.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ParseState {
     /// Import statements found in this file
     pub unresolved_imports: Vec<UnresolvedImport>,
@@ -275,6 +276,116 @@ impl ParserDispatcher {
         resolver.resolve(&mut graph, all_imports, all_calls);
 
         (graph, errors)
+    }
+
+    /// Incremental variant of [`parse_files_parallel`].
+    ///
+    /// For each file whose content hash is present in `file_cache`, the cached
+    /// `(CodeGraph, ParseState)` fragment is reused instead of invoking
+    /// tree-sitter. Only changed or new files are actually re-parsed.
+    ///
+    /// Cross-file resolution (Phase 3) always runs because import/call edges
+    /// span file boundaries and must reflect the current set of files.
+    ///
+    /// Returns `(merged_graph, parse_errors, cached_count, parsed_count)`.
+    pub fn parse_files_incremental(
+        &self,
+        files: &[PathBuf],
+        root: PathBuf,
+        file_cache: &crate::cache::FileGraphCache,
+    ) -> (CodeGraph, Vec<String>, usize, usize) {
+        // ── Phase 1: parallel parse (cache-aware) ────────────────────────────
+        let per_file: Vec<(CodeGraph, ParseState, Option<String>, bool)> = files
+            .par_iter()
+            .map(|file| {
+                // Try cache first
+                if let Ok(hash) = crate::cache::GraphCache::compute_file_checksum(file) {
+                    if let Some((cached_graph, cached_state)) = file_cache.load(&hash) {
+                        return (cached_graph, cached_state, None, true);
+                    }
+                }
+
+                // Cache miss — parse fresh
+                let mut local_graph = CodeGraph::new(root.clone());
+                match self.find_parser(file) {
+                    Some(parser) => match parser.parse_file_with_state(file, &mut local_graph) {
+                        Ok((_, state)) => {
+                            // Persist for next run
+                            if let Ok(hash) = crate::cache::GraphCache::compute_file_checksum(file)
+                            {
+                                file_cache.save(&hash, &local_graph, &state);
+                            }
+                            (local_graph, state, None, false)
+                        }
+                        Err(e) => (
+                            local_graph,
+                            ParseState::default(),
+                            Some(format!("{}: {}", file.display(), e)),
+                            false,
+                        ),
+                    },
+                    None => {
+                        let err = ParseError::UnsupportedLanguage(
+                            file.extension()
+                                .and_then(|e| e.to_str())
+                                .unwrap_or("unknown")
+                                .to_string(),
+                        );
+                        (
+                            local_graph,
+                            ParseState::default(),
+                            Some(format!("{}: {}", file.display(), err)),
+                            false,
+                        )
+                    }
+                }
+            })
+            .collect();
+
+        // ── Phase 2: sequential merge + NodeId remapping ─────────────────────
+        let mut graph = CodeGraph::new(root.clone());
+        let mut errors = Vec::new();
+        let mut all_imports: Vec<UnresolvedImport> = Vec::new();
+        let mut all_calls: Vec<UnresolvedCall> = Vec::new();
+        let mut cached_count = 0usize;
+        let mut parsed_count = 0usize;
+
+        for (local_graph, mut state, err, from_cache) in per_file {
+            let id_map = graph.merge(local_graph);
+
+            for imp in &mut state.unresolved_imports {
+                if let Some(&new_id) = id_map.get(&imp.import_node_id) {
+                    imp.import_node_id = new_id;
+                }
+                if let Some(&new_id) = id_map.get(&imp.importing_file_node_id) {
+                    imp.importing_file_node_id = new_id;
+                }
+            }
+            for call in &mut state.unresolved_calls {
+                if let Some(&new_id) = id_map.get(&call.caller_node_id) {
+                    call.caller_node_id = new_id;
+                }
+            }
+
+            all_imports.extend(state.unresolved_imports);
+            all_calls.extend(state.unresolved_calls);
+
+            if from_cache {
+                cached_count += 1;
+            } else {
+                parsed_count += 1;
+            }
+
+            if let Some(e) = err {
+                errors.push(e);
+            }
+        }
+
+        // ── Phase 3: cross-file resolution ───────────────────────────────────
+        let resolver = CrossFileResolver::new(&root);
+        resolver.resolve(&mut graph, all_imports, all_calls);
+
+        (graph, errors, cached_count, parsed_count)
     }
 
     /// Get all supported file extensions

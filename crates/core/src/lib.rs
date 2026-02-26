@@ -21,7 +21,7 @@ pub mod suppress;
 
 pub use analyzer::{Analyzer, AnalyzerDispatcher, GraphAnalyzer};
 pub use baseline::{filter_findings, Baseline, BaselineEntry};
-pub use cache::{GraphCache, GraphCacheMeta};
+pub use cache::{FileGraphCache, GraphCache, GraphCacheMeta};
 pub use config::RevetConfig;
 pub use diff::{
     filter_findings_by_diff, ChangeClassification, ChangeImpact, DiffAnalyzer, DiffFileLines,

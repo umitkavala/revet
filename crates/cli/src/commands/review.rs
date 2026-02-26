@@ -5,8 +5,9 @@ use colored::Colorize;
 use revet_core::{
     apply_fixes, create_store, discover_files, discover_files_extended, filter_findings,
     filter_findings_by_diff, filter_findings_by_inline, reconstruct_graph, AnalyzerDispatcher,
-    Baseline, CodeGraph, DiffAnalyzer, Finding, GitTreeReader, GraphCache, GraphCacheMeta,
-    GraphStore, ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary, Severity,
+    Baseline, CodeGraph, DiffAnalyzer, FileGraphCache, Finding, GitTreeReader, GraphCache,
+    GraphCacheMeta, GraphStore, ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary,
+    Severity,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -60,17 +61,21 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         return Ok(ReviewExitCode::Success);
     }
 
-    // ── 3. Parse (parallel) ────────────────────────────────────
+    // ── 3. Parse (incremental, cache-aware) ──────────────────────
     eprint!("  Building code graph... ");
     let graph_start = Instant::now();
 
-    let (graph, parse_errors) = dispatcher.parse_files_parallel(&files, repo_path.clone());
+    let file_cache = FileGraphCache::new(&repo_path);
+    let (graph, parse_errors, cached_count, parsed_count) =
+        dispatcher.parse_files_incremental(&files, repo_path.clone(), &file_cache);
 
     let node_count: usize = graph.nodes().count();
     eprintln!(
-        "{} — {} files, {} nodes ({:.1}s)",
+        "{} — {} files ({} cached, {} parsed), {} nodes ({:.1}s)",
         "done".green(),
         files.len(),
+        cached_count,
+        parsed_count,
         node_count,
         graph_start.elapsed().as_secs_f64()
     );
