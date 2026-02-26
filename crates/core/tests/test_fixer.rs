@@ -14,6 +14,7 @@ fn make_finding(file: PathBuf, line: usize, suggestion: &str, fix_kind: FixKind)
         affected_dependents: 0,
         suggestion: Some(suggestion.to_string()),
         fix_kind: Some(fix_kind),
+        ..Default::default()
     }
 }
 
@@ -176,6 +177,7 @@ fn test_replace_deprecated_sklearn_import() {
             find: r"sklearn\.(?:cross_validation|grid_search)".to_string(),
             replace: "sklearn.model_selection".to_string(),
         }),
+        ..Default::default()
     };
     let f2 = Finding {
         id: "ML-002".to_string(),
@@ -189,6 +191,7 @@ fn test_replace_deprecated_sklearn_import() {
             find: r"sklearn\.(?:cross_validation|grid_search)".to_string(),
             replace: "sklearn.model_selection".to_string(),
         }),
+        ..Default::default()
     };
 
     let report = apply_fixes(&[f1, f2]).unwrap();

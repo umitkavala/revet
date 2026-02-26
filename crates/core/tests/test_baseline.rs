@@ -12,6 +12,7 @@ fn make_finding(file: &str, message: &str, line: usize) -> Finding {
         affected_dependents: 0,
         suggestion: None,
         fix_kind: None,
+        ..Default::default()
     }
 }
 

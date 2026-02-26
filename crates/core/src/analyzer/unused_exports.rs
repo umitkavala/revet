@@ -95,6 +95,7 @@ impl GraphAnalyzer for UnusedExportsAnalyzer {
                     "Remove this symbol or add an import/call to suppress this warning".to_string(),
                 ),
                 fix_kind: None,
+                ..Default::default()
             });
         }
 

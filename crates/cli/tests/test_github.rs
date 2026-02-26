@@ -12,6 +12,7 @@ fn make_finding(severity: Severity, file: &str, line: usize) -> Finding {
         affected_dependents: 0,
         suggestion: None,
         fix_kind: None,
+        ..Default::default()
     }
 }
 

@@ -71,6 +71,7 @@ fn make_finding(id: &str, file: PathBuf, line: usize) -> Finding {
         affected_dependents: 0,
         suggestion: None,
         fix_kind: None,
+        ..Default::default()
     }
 }
 

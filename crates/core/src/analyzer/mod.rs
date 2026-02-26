@@ -274,5 +274,6 @@ pub(crate) fn make_finding(
         affected_dependents: 0,
         suggestion,
         fix_kind,
+        ..Default::default()
     }
 }

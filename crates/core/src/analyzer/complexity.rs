@@ -274,6 +274,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
                         "Break this function into smaller, focused functions".to_string(),
                     ),
                     fix_kind: None,
+                    ..Default::default()
                 });
             } else if fn_length >= FN_LEN_WARN {
                 findings.push(Finding {
@@ -293,6 +294,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
                             .to_string(),
                     ),
                     fix_kind: None,
+                    ..Default::default()
                 });
             }
 
@@ -315,6 +317,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
                             .to_string(),
                     ),
                     fix_kind: None,
+                    ..Default::default()
                 });
             } else if param_count >= PARAM_WARN {
                 findings.push(Finding {
@@ -333,6 +336,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
                         "Consider grouping related parameters into a struct or object".to_string(),
                     ),
                     fix_kind: None,
+                    ..Default::default()
                 });
             }
 
@@ -378,6 +382,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
                             .to_string(),
                     ),
                     fix_kind: None,
+                    ..Default::default()
                 });
             } else if complexity >= COMPLEXITY_WARN {
                 findings.push(Finding {
@@ -396,6 +401,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
                         "Consider reducing branching by extracting helper functions".to_string(),
                     ),
                     fix_kind: None,
+                    ..Default::default()
                 });
             }
 
@@ -418,6 +424,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
                         "Reduce nesting using early returns or helper functions".to_string(),
                     ),
                     fix_kind: None,
+                    ..Default::default()
                 });
             } else if nesting >= NESTING_WARN {
                 findings.push(Finding {
@@ -437,6 +444,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
                             .to_string(),
                     ),
                     fix_kind: None,
+                    ..Default::default()
                 });
             }
         }

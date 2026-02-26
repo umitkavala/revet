@@ -185,6 +185,7 @@ fn run_analysis(repo_path: &Path, cli: &crate::Cli) -> Result<()> {
             affected_dependents: 0,
             suggestion: None,
             fix_kind: None,
+            ..Default::default()
         });
     }
 

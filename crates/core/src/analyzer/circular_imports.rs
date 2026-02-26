@@ -184,6 +184,7 @@ impl GraphAnalyzer for CircularImportsAnalyzer {
                     "Break the cycle by extracting shared code to a separate module".to_string(),
                 ),
                 fix_kind: None,
+                ..Default::default()
             });
         }
 

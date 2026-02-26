@@ -1,5 +1,6 @@
 //! Revet CLI library — exposed for integration tests
 
+pub mod ai;
 pub mod commands;
 pub mod output;
 #[allow(dead_code)]

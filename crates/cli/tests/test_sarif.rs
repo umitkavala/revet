@@ -12,6 +12,7 @@ fn make_finding(id: &str, severity: Severity, message: &str, file: &str, line: u
         affected_dependents: 0,
         suggestion: None,
         fix_kind: None,
+        ..Default::default()
     }
 }
 

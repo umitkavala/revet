@@ -123,6 +123,7 @@ pub fn run(base: &str, cli: &crate::Cli) -> Result<ReviewExitCode> {
             affected_dependents: 0,
             suggestion: None,
             fix_kind: None,
+            ..Default::default()
         });
     }
 

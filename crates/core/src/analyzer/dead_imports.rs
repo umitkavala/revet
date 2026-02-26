@@ -184,6 +184,7 @@ impl GraphAnalyzer for DeadImportsAnalyzer {
                             affected_dependents: 0,
                             suggestion: Some(format!("Remove the unused import of `{local_name}`")),
                             fix_kind: None,
+                            ..Default::default()
                         });
                     }
                 }

@@ -15,6 +15,7 @@ fn make_finding(file: &str, line: usize) -> Finding {
         affected_dependents: 0,
         suggestion: None,
         fix_kind: None,
+        ..Default::default()
     }
 }
 

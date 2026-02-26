@@ -12,6 +12,7 @@ use revet_core::{
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
+use crate::ai::AiReasoner;
 use crate::output;
 use crate::output::github_comment;
 
@@ -125,6 +126,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
                 affected_dependents: total_deps,
                 suggestion: None,
                 fix_kind: None,
+                ..Default::default()
             });
         }
 
@@ -151,6 +153,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
             affected_dependents: 0,
             suggestion: None,
             fix_kind: None,
+            ..Default::default()
         });
     }
 
@@ -180,7 +183,25 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         ga_start.elapsed().as_secs_f64()
     );
 
-    // ── 4c. Apply fixes ───────────────────────────────────────────
+    // ── 4c. AI reasoning ─────────────────────────────────────────
+    if cli.ai {
+        eprint!("  Running AI reasoning... ");
+        let ai_start = Instant::now();
+        let reasoner = AiReasoner::new(config.ai.clone(), cli.max_cost);
+        match reasoner.enrich(&mut findings, &repo_path) {
+            Ok(stats) => eprintln!(
+                "{} — {} enriched, {} likely false positives (${:.4}, {:.1}s)",
+                "done".green(),
+                stats.findings_enriched,
+                stats.false_positives,
+                stats.cost_usd,
+                ai_start.elapsed().as_secs_f64()
+            ),
+            Err(e) => eprintln!("{}: {}", "warn".yellow(), e),
+        }
+    }
+
+    // ── 4d. Apply fixes ───────────────────────────────────────────
     if cli.fix {
         eprint!("  Applying fixes... ");
         match apply_fixes(&findings) {
@@ -487,6 +508,8 @@ pub(crate) fn print_terminal(
                 &display_path.to_string(),
                 f.line,
                 f.suggestion.as_deref(),
+                f.ai_note.as_deref(),
+                f.ai_false_positive,
             )
         );
     }

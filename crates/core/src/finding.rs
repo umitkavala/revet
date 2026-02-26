@@ -60,6 +60,31 @@ pub struct Finding {
     /// How this finding can be auto-fixed (None = no fix metadata)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fix_kind: Option<FixKind>,
+
+    /// AI-generated explanation and remediation note (populated when --ai is used)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ai_note: Option<String>,
+
+    /// AI assessed this as likely a false positive
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ai_false_positive: bool,
+}
+
+impl Default for Finding {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            severity: Severity::Info,
+            message: String::new(),
+            file: PathBuf::new(),
+            line: 0,
+            affected_dependents: 0,
+            suggestion: None,
+            fix_kind: None,
+            ai_note: None,
+            ai_false_positive: false,
+        }
+    }
 }
 
 /// Summary of an entire review run
