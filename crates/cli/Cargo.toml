@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+readme.workspace = true
 repository.workspace = true
 description = "Code review agent with deterministic analysis and selective LLM reasoning"
 keywords = ["code-review", "static-analysis", "linter", "cli", "tree-sitter"]
