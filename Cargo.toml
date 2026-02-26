@@ -12,6 +12,8 @@ edition = "2021"
 authors = ["Umit Kavala <umitkavala@users.noreply.github.com>"]
 license = "MIT"
 repository = "https://github.com/umitkavala/revet"
+homepage = "https://umitkavala.github.io/revet"
+documentation = "https://umitkavala.github.io/revet"
 
 [workspace.dependencies]
 # Core dependencies

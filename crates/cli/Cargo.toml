@@ -6,6 +6,8 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Code review agent with deterministic analysis and selective LLM reasoning"
+keywords = ["code-review", "static-analysis", "linter", "cli", "tree-sitter"]
+categories = ["development-tools", "command-line-utilities"]
 
 [lib]
 name = "revet_cli"
