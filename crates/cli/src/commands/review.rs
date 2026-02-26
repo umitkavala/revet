@@ -98,10 +98,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
                 revet_core::ChangeClassification::Breaking => Severity::Error,
                 revet_core::ChangeClassification::PotentiallyBreaking => Severity::Warning,
                 revet_core::ChangeClassification::Safe => {
-                    if !cli.full {
-                        continue; // skip safe changes unless --full
-                    }
-                    Severity::Info
+                    continue; // safe changes are never reported — not actionable
                 }
             };
 

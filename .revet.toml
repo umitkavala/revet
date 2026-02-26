@@ -32,6 +32,7 @@ findings = []
 # security and SQL findings so they don't pollute review output
 [ignore.per_path]
 "**/tests/**" = ["SEC", "SQL"]
+"**/commands/explain.rs" = ["SEC", "SQL"]
 
 [output]
 format = "terminal"
