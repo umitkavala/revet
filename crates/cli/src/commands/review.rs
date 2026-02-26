@@ -284,8 +284,8 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     }
 
     let cache = GraphCache::new(&repo_path);
-    if let Err(e) = cache.save_meta(&meta) {
-        eprintln!("  {}: failed to save metadata: {}", "warn".yellow(), e);
+    if let Err(e) = cache.save(&graph, &meta) {
+        eprintln!("  {}: failed to save graph cache: {}", "warn".yellow(), e);
     }
 
     // ── 5b. Post GitHub PR comments ──────────────────────────────
@@ -329,11 +329,26 @@ fn load_old_graph(
     config: &RevetConfig,
     dispatcher: &ParserDispatcher,
 ) -> Option<CodeGraph> {
-    // 1. Try CozoStore (fast path)
+    // 1. Try msgpack cache (fast path — serialized whole graph)
+    let cache = GraphCache::new(repo_path);
+    if let Ok(Some((cached_graph, _))) = cache.load() {
+        eprint!("  Loading baseline graph from cache... ");
+        let _ = std::io::stderr().flush();
+        let baseline_start = Instant::now();
+        eprintln!(
+            "{} ({} nodes, {:.1}s)",
+            "done".green(),
+            cached_graph.nodes().count(),
+            baseline_start.elapsed().as_secs_f64()
+        );
+        return Some(cached_graph);
+    }
+
+    // 2. Try CozoStore (slower fallback)
     if let Ok(store) = create_store(repo_path) {
         let snaps = store.snapshots().unwrap_or_default();
         if snaps.iter().any(|s| s.name == "cached") {
-            eprint!("  Loading baseline graph from cache... ");
+            eprint!("  Loading baseline graph from store... ");
             let _ = std::io::stderr().flush();
             let baseline_start = Instant::now();
             match reconstruct_graph(&store, "cached", repo_path) {
