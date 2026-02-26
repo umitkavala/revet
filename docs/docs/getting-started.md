@@ -70,7 +70,7 @@ The terminal summary always shows the exact command at the end:
 
 ## Next steps
 
-- [Commands reference →](commands)
+- [Commands reference →](commands/overview)
 - [Configure analyzers →](configuration)
 - [AI reasoning →](ai-reasoning)
 - [CI/CD integration →](ci-cd)

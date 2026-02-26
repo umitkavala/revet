@@ -3,7 +3,20 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 const sidebars: SidebarsConfig = {
   docsSidebar: [
     'getting-started',
-    'commands',
+    {
+      type: 'category',
+      label: 'Commands',
+      items: [
+        'commands/overview',
+        'commands/review',
+        'commands/diff',
+        'commands/baseline',
+        'commands/log',
+        'commands/watch',
+        'commands/init',
+        'commands/explain',
+      ],
+    },
     {
       type: 'category',
       label: 'Analyzers',
@@ -22,6 +35,7 @@ const sidebars: SidebarsConfig = {
     },
     'language-parsers',
     'output-formats',
+    'ai-reasoning',
     'configuration',
     'ci-cd',
     'architecture',

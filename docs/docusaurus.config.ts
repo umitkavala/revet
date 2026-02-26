@@ -73,7 +73,7 @@ const config: Config = {
           title: 'Docs',
           items: [
             {label: 'Getting Started', to: '/docs/getting-started'},
-            {label: 'Commands', to: '/docs/commands'},
+            {label: 'Commands', to: '/docs/commands/overview'},
             {label: 'Configuration', to: '/docs/configuration'},
           ],
         },
