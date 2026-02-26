@@ -81,11 +81,14 @@ impl AiReasoner {
             }
         };
 
-        // Only enrich warning/error findings (skip info and parse errors)
+        // Only enrich warning/error findings that have no suggestion yet
+        // (findings with suggestions are already self-explanatory)
         let eligible: Vec<usize> = findings
             .iter()
             .enumerate()
-            .filter(|(_, f)| matches!(f.severity, Severity::Warning | Severity::Error))
+            .filter(|(_, f)| {
+                matches!(f.severity, Severity::Warning | Severity::Error) && f.suggestion.is_none()
+            })
             .map(|(i, _)| i)
             .collect();
 

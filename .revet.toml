@@ -13,8 +13,8 @@ infra = false
 
 [ai]
 # LLM configuration for development
-provider = "anthropic"
-model = "claude-sonnet-4-20250514"
+provider = "openai"
+model = "gpt-4o"
 max_cost_per_run = 0.50
 
 [ignore]
