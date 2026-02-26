@@ -335,9 +335,15 @@ fn load_old_graph(
         if snaps.iter().any(|s| s.name == "cached") {
             eprint!("  Loading baseline graph from cache... ");
             let _ = std::io::stderr().flush();
+            let baseline_start = Instant::now();
             match reconstruct_graph(&store, "cached", repo_path) {
                 Ok(graph) => {
-                    eprintln!("{} ({} nodes)", "done".green(), graph.nodes().count());
+                    eprintln!(
+                        "{} ({} nodes, {:.1}s)",
+                        "done".green(),
+                        graph.nodes().count(),
+                        baseline_start.elapsed().as_secs_f64()
+                    );
                     return Some(graph);
                 }
                 Err(e) => {
@@ -353,10 +359,16 @@ fn load_old_graph(
         Ok(reader) => {
             eprint!("  Building baseline graph from git ({})... ", base);
             let _ = std::io::stderr().flush();
+            let baseline_start = Instant::now();
             match reader.build_graph_at_ref(base, repo_path, dispatcher) {
                 Ok(blob_graph) => {
                     let node_count: usize = blob_graph.nodes().count();
-                    eprintln!("{} ({} nodes)", "done".green(), node_count);
+                    eprintln!(
+                        "{} ({} nodes, {:.1}s)",
+                        "done".green(),
+                        node_count,
+                        baseline_start.elapsed().as_secs_f64()
+                    );
                     Some(blob_graph)
                 }
                 Err(e) => {
