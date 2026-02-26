@@ -34,6 +34,11 @@ toolchain       = false  # CI tools not declared in manifests
 paths    = ["vendor/", "node_modules/", "dist/", "target/"]
 findings = ["SEC-003"]   # suppress specific finding IDs globally
 
+[ignore.per_path]
+# Suppress specific rule prefixes for matching file globs
+"**/tests/**"    = ["SEC", "SQL"]   # ignore SEC and SQL in test files
+"**/fixtures/**" = ["*"]            # suppress all findings in fixtures
+
 [output]
 format       = "terminal"   # "terminal" | "json" | "sarif" | "github"
 color        = true
@@ -65,7 +70,37 @@ password = "test-fixture"  # revet-ignore SEC
 api_key  = get_key()       # revet-ignore SEC SQL
 ```
 
-Multiple prefixes can be listed space-separated after `revet-ignore`.
+Multiple prefixes can be listed space-separated after `revet-ignore`. The comment can appear on the same line as the code or on the line immediately before it. Any comment style works (`#`, `//`, `--`, `/* */`).
+
+## Per-path suppression
+
+Suppress specific rule prefixes for entire directories or file patterns, without touching the source files:
+
+```toml
+[ignore.per_path]
+"**/tests/**"    = ["SEC", "SQL"]   # ignore SEC and SQL findings in all test files
+"**/fixtures/**" = ["*"]            # suppress everything in fixtures
+"**/migrations/**" = ["SQL"]        # SQL rules are noise in migration files
+```
+
+The keys are glob patterns matched against each file's path relative to the repo root. The values are lists of finding ID prefixes (or `["*"]` to suppress all findings for that path).
+
+## Viewing suppressed findings
+
+Use `--show-suppressed` to see which findings were suppressed and why, without changing what affects the exit code:
+
+```bash
+revet review --show-suppressed
+```
+
+Each suppressed finding is shown with a dimmed `[suppressed: <reason>]` tag:
+
+```
+  ⚠️  Possible Hardcoded Password  tests/fixtures/setup.py:8
+     [suppressed: per-path rule: **/tests/**]
+```
+
+The summary line shows a breakdown: `51 finding(s) suppressed (3 inline, 48 per-path)`.
 
 ## Baseline
 
@@ -76,4 +111,4 @@ revet baseline          # create / update
 revet baseline --clear  # remove
 ```
 
-The baseline file (`.revet-baseline.json`) should be committed to your repo.
+The baseline file (`.revet-cache/baseline.json`) should be committed to your repo so the whole team shares the same baseline.

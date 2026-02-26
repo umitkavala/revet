@@ -78,3 +78,20 @@ Required environment variables (all set automatically by GitHub Actions):
 | `GITHUB_SHA` | HEAD commit SHA |
 
 Findings are deduplicated across re-runs using an invisible HTML marker embedded in each comment body. Only findings on changed lines are posted.
+
+## Run log
+
+Every `revet review` run writes a full JSON log to `.revet-cache/runs/<id>.json`, regardless of output format. The log contains both kept and suppressed findings with suppression reasons — useful for auditing, tooling, or debugging noise.
+
+```bash
+revet log                   # list past runs
+revet log --show <id>       # full JSON for one run
+```
+
+The terminal summary always shows the run ID at the bottom:
+
+```
+  Run log: revet log --show 1772142454966
+```
+
+Run logs are local-only (`.revet-cache/` is gitignored by default) and are never posted anywhere automatically.
