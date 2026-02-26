@@ -4,10 +4,10 @@ use anyhow::Result;
 use colored::Colorize;
 use revet_core::{
     apply_fixes, create_store, discover_files, discover_files_extended, filter_findings,
-    filter_findings_by_diff, filter_findings_by_inline, reconstruct_graph, AnalyzerDispatcher,
-    Baseline, CodeGraph, DiffAnalyzer, FileGraphCache, Finding, GitTreeReader, GraphCache,
-    GraphCacheMeta, GraphStore, ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary,
-    Severity,
+    filter_findings_by_diff, filter_findings_by_inline, filter_findings_by_path_rules,
+    reconstruct_graph, AnalyzerDispatcher, Baseline, CodeGraph, DiffAnalyzer, FileGraphCache,
+    Finding, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore, ImpactAnalysis,
+    ParserDispatcher, RevetConfig, ReviewSummary, Severity,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -225,7 +225,20 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     let (new_findings, inline_suppressed) = filter_findings_by_inline(findings);
     findings = new_findings;
 
-    // ── 4e. Baseline suppression ───────────────────────────────────
+    // ── 4e. Per-path rule suppression ────────────────────────────
+    if !config.ignore.per_path.is_empty() {
+        let (new_findings, path_suppressed) =
+            filter_findings_by_path_rules(findings, &config.ignore.per_path, &repo_path);
+        findings = new_findings;
+        if path_suppressed > 0 {
+            eprintln!(
+                "  {} finding(s) suppressed by per-path rules",
+                path_suppressed
+            );
+        }
+    }
+
+    // ── 4f. Baseline suppression ───────────────────────────────────
     let mut suppressed_count = 0usize;
     if !cli.no_baseline {
         if let Some(baseline) = Baseline::load(&repo_path)? {

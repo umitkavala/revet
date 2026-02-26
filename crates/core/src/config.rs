@@ -155,13 +155,24 @@ pub struct AIConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IgnoreConfig {
-    /// Paths to ignore
+    /// Paths to ignore entirely (glob patterns)
     #[serde(default = "default_ignore_paths")]
     pub paths: Vec<String>,
 
-    /// Finding IDs to suppress
+    /// Finding ID prefixes to suppress globally (e.g. ["SEC", "SQL"])
     #[serde(default)]
     pub findings: Vec<String>,
+
+    /// Per-path rule suppression: glob pattern → list of finding ID prefixes
+    ///
+    /// Example in .revet.toml:
+    /// ```toml
+    /// [ignore.per_path]
+    /// "**/tests/**" = ["SEC", "SQL"]
+    /// "src/generated/**" = ["*"]
+    /// ```
+    #[serde(default)]
+    pub per_path: std::collections::HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -285,6 +296,7 @@ impl Default for IgnoreConfig {
         Self {
             paths: default_ignore_paths(),
             findings: Vec::new(),
+            per_path: std::collections::HashMap::new(),
         }
     }
 }

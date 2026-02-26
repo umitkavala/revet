@@ -94,3 +94,49 @@ pub fn filter_findings_by_inline(findings: Vec<Finding>) -> (Vec<Finding>, usize
 
     (kept, suppressed)
 }
+
+/// Filter findings using per-path suppression rules from `.revet.toml`.
+///
+/// `per_path` maps glob patterns (e.g. `"**/tests/**"`) to lists of finding
+/// ID prefixes (e.g. `["SEC", "SQL"]` or `["*"]` for all).
+///
+/// Returns `(kept_findings, suppressed_count)`.
+pub fn filter_findings_by_path_rules(
+    findings: Vec<Finding>,
+    per_path: &std::collections::HashMap<String, Vec<String>>,
+    repo_root: &std::path::Path,
+) -> (Vec<Finding>, usize) {
+    if per_path.is_empty() {
+        return (findings, 0);
+    }
+
+    // Pre-compile glob patterns
+    let rules: Vec<(glob::Pattern, &Vec<String>)> = per_path
+        .iter()
+        .filter_map(|(pattern, prefixes)| glob::Pattern::new(pattern).ok().map(|p| (p, prefixes)))
+        .collect();
+
+    let mut kept = Vec::new();
+    let mut suppressed = 0usize;
+
+    for finding in findings {
+        // Match against the path relative to repo root for consistent glob behaviour
+        let rel_path = finding
+            .file
+            .strip_prefix(repo_root)
+            .unwrap_or(&finding.file);
+        let path_str = rel_path.to_string_lossy();
+
+        let is_suppressed = rules.iter().any(|(pattern, prefixes)| {
+            pattern.matches(&path_str) && matches_suppression(&finding.id, prefixes)
+        });
+
+        if is_suppressed {
+            suppressed += 1;
+        } else {
+            kept.push(finding);
+        }
+    }
+
+    (kept, suppressed)
+}

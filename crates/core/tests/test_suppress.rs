@@ -1,5 +1,8 @@
 use revet_core::finding::{Finding, Severity};
-use revet_core::suppress::{filter_findings_by_inline, matches_suppression, parse_suppressions};
+use revet_core::suppress::{
+    filter_findings_by_inline, filter_findings_by_path_rules, matches_suppression,
+    parse_suppressions,
+};
 use std::io::Write;
 use std::path::PathBuf;
 use tempfile::NamedTempFile;
@@ -212,6 +215,73 @@ fn test_mixed_suppressed_and_kept() {
     assert_eq!(suppressed, 1);
     assert_eq!(kept.len(), 1);
     assert_eq!(kept[0].id, "SEC-002");
+}
+
+// ── filter_findings_by_path_rules ────────────────────────────
+
+#[test]
+fn test_per_path_suppresses_matching_prefix() {
+    let root = std::path::Path::new("/repo");
+    let mut per_path = std::collections::HashMap::new();
+    per_path.insert(
+        "**/tests/**".to_string(),
+        vec!["SEC".to_string(), "SQL".to_string()],
+    );
+
+    let findings = vec![
+        make_finding(
+            "SEC-001",
+            PathBuf::from("/repo/crates/core/tests/foo.rs"),
+            1,
+        ),
+        make_finding(
+            "SQL-001",
+            PathBuf::from("/repo/crates/core/tests/bar.rs"),
+            1,
+        ),
+        make_finding("ML-001", PathBuf::from("/repo/crates/core/tests/baz.rs"), 1), // not in rule
+        make_finding("SEC-002", PathBuf::from("/repo/src/main.rs"), 1), // path doesn't match
+    ];
+
+    let (kept, suppressed) = filter_findings_by_path_rules(findings, &per_path, root);
+    assert_eq!(suppressed, 2);
+    assert_eq!(kept.len(), 2);
+    assert!(kept.iter().any(|f| f.id == "ML-001"));
+    assert!(kept.iter().any(|f| f.id == "SEC-002"));
+}
+
+#[test]
+fn test_per_path_wildcard_suppresses_all() {
+    let root = std::path::Path::new("/repo");
+    let mut per_path = std::collections::HashMap::new();
+    per_path.insert("src/generated/**".to_string(), vec!["*".to_string()]);
+
+    let findings = vec![
+        make_finding("SEC-001", PathBuf::from("/repo/src/generated/schema.rs"), 1),
+        make_finding("ML-001", PathBuf::from("/repo/src/generated/schema.rs"), 5),
+        make_finding("SEC-002", PathBuf::from("/repo/src/main.rs"), 1), // not suppressed
+    ];
+
+    let (kept, suppressed) = filter_findings_by_path_rules(findings, &per_path, root);
+    assert_eq!(suppressed, 2);
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].id, "SEC-002");
+}
+
+#[test]
+fn test_per_path_empty_rules_no_change() {
+    let root = std::path::Path::new("/repo");
+    let per_path = std::collections::HashMap::new();
+
+    let findings = vec![make_finding(
+        "SEC-001",
+        PathBuf::from("/repo/tests/foo.rs"),
+        1,
+    )];
+
+    let (kept, suppressed) = filter_findings_by_path_rules(findings, &per_path, root);
+    assert_eq!(suppressed, 0);
+    assert_eq!(kept.len(), 1);
 }
 
 // ── matches_suppression (unit tests) ─────────────────────────

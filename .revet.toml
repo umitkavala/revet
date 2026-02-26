@@ -28,6 +28,11 @@ paths = [
 ]
 findings = []
 
+# Test files intentionally contain "bad" patterns as fixtures — suppress
+# security and SQL findings so they don't pollute review output
+[ignore.per_path]
+"**/tests/**" = ["SEC", "SQL"]
+
 [output]
 format = "terminal"
 color = true
