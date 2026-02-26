@@ -30,7 +30,8 @@ revet review --show-suppressed  # include suppressed findings in output
 | `--show-suppressed` | Include suppressed findings in output, marked with their suppression reason |
 | `--post-comment` | Post findings as inline GitHub PR review comments |
 | `--module` | Run only specific modules (comma-separated) |
-| `--ai` | Enable LLM reasoning (opt-in, requires API key) |
+| `--ai` | Enable LLM reasoning (opt-in, requires API key) — see [AI Reasoning](ai-reasoning) |
+| `--max-cost <usd>` | Cap AI spend per run in USD (default: $1.00 from config) |
 
 ### `--show-suppressed`
 
@@ -48,6 +49,17 @@ The summary line also shows a breakdown by suppression source:
 ```
   51 finding(s) suppressed (3 inline, 48 per-path)
 ```
+
+### `--ai`
+
+Sends each eligible finding to an LLM with a ±4 line code snippet. The model returns a concise note and flags likely false positives. Only `warning`/`error` findings without an existing suggestion are sent.
+
+```bash
+revet review --ai
+revet review --ai --max-cost 0.25   # cap spend at $0.25
+```
+
+See [AI Reasoning →](ai-reasoning) for full setup, model choices, and cost control.
 
 After each run, the terminal summary shows the exact command to view the full run log:
 

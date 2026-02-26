@@ -72,4 +72,5 @@ The terminal summary always shows the exact command at the end:
 
 - [Commands reference →](commands)
 - [Configure analyzers →](configuration)
+- [AI reasoning →](ai-reasoning)
 - [CI/CD integration →](ci-cd)
