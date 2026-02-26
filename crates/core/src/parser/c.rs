@@ -108,6 +108,7 @@ impl CParser {
         node_ids
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn visit_toplevel(
         &self,
         node: &tree_sitter::Node,

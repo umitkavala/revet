@@ -15,6 +15,12 @@ const ENTRY_POINT_NAMES: &[&str] = &[
 
 pub struct UnusedExportsAnalyzer;
 
+impl Default for UnusedExportsAnalyzer {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl UnusedExportsAnalyzer {
     pub fn new() -> Self {
         Self

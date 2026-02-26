@@ -11,6 +11,12 @@ use std::collections::{HashMap, HashSet};
 
 pub struct CircularImportsAnalyzer;
 
+impl Default for CircularImportsAnalyzer {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl CircularImportsAnalyzer {
     pub fn new() -> Self {
         Self
