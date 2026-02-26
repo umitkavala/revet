@@ -53,6 +53,10 @@ impl AiReasoner {
     }
 
     pub fn resolve_api_key(&self) -> Option<String> {
+        // Ollama is local — no API key needed
+        if self.config.provider == "ollama" {
+            return Some(String::new());
+        }
         if let Some(key) = &self.config.api_key {
             if !key.is_empty() {
                 return Some(key.clone());
@@ -140,6 +144,14 @@ impl AiReasoner {
 
         // Call LLM
         let response = match self.config.provider.as_str() {
+            "ollama" => {
+                let base_url = self
+                    .config
+                    .base_url
+                    .as_deref()
+                    .unwrap_or("http://localhost:11434");
+                client::call_ollama(base_url, &self.config.model, SYSTEM_PROMPT, &user_message)?
+            }
             "openai" => {
                 client::call_openai(&api_key, &self.config.model, SYSTEM_PROMPT, &user_message)?
             }

@@ -45,6 +45,49 @@ pub fn call_anthropic(api_key: &str, model: &str, system: &str, user: &str) -> R
     })
 }
 
+/// Call an Ollama instance via its OpenAI-compatible endpoint.
+///
+/// Ollama requires no Authorization header and may not return a `usage` field,
+/// so token counts are reported as 0 (cost is always $0.00).
+pub fn call_ollama(base_url: &str, model: &str, system: &str, user: &str) -> Result<ApiResponse> {
+    let client = reqwest::blocking::Client::new();
+    let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
+    let body = json!({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user}
+        ]
+    });
+
+    let resp = client
+        .post(&url)
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().unwrap_or_default();
+        bail!("Ollama API error {}: {}", status, text);
+    }
+
+    let json: Value = resp.json()?;
+    let content = json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    // Ollama may omit usage; default to 0
+    let input_tokens = json["usage"]["prompt_tokens"].as_u64().unwrap_or(0) as usize;
+    let output_tokens = json["usage"]["completion_tokens"].as_u64().unwrap_or(0) as usize;
+
+    Ok(ApiResponse {
+        content,
+        input_tokens,
+        output_tokens,
+    })
+}
+
 pub fn call_openai(api_key: &str, model: &str, system: &str, user: &str) -> Result<ApiResponse> {
     let client = reqwest::blocking::Client::new();
     let body = json!({
@@ -96,6 +139,7 @@ pub fn estimate_cost_usd(
     output_tokens: usize,
 ) -> f64 {
     let (input_price, output_price) = match provider {
+        "ollama" => return 0.0, // local inference, always free
         "openai" => {
             if model.contains("gpt-4o-mini") {
                 (0.15, 0.60)

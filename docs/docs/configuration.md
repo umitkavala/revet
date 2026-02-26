@@ -45,9 +45,10 @@ color        = true
 show_evidence = true
 
 [ai]
-provider = "anthropic"              # "anthropic" | "openai"
+provider = "anthropic"              # "anthropic" | "openai" | "ollama"
 model    = "claude-sonnet-4-20250514"
-api_key  = "sk-..."                 # or set ANTHROPIC_API_KEY env var
+api_key  = "sk-..."                 # or set ANTHROPIC_API_KEY env var; not needed for ollama
+# base_url = "http://localhost:11434"  # override API endpoint (ollama or proxy)
 
 # Custom rules — zero or more
 [[rules]]

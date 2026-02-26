@@ -136,7 +136,7 @@ pub struct ModulesConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AIConfig {
-    /// LLM provider (e.g. "anthropic", "openai")
+    /// LLM provider: "anthropic" | "openai" | "ollama"
     #[serde(default = "default_provider")]
     pub provider: String,
 
@@ -144,13 +144,19 @@ pub struct AIConfig {
     #[serde(default = "default_model")]
     pub model: String,
 
-    /// API key — can also be set via ANTHROPIC_API_KEY / OPENAI_API_KEY env var
+    /// API key — can also be set via ANTHROPIC_API_KEY / OPENAI_API_KEY env var.
+    /// Not required for Ollama.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
 
     /// Max cost per run in USD
     #[serde(default = "default_max_cost")]
     pub max_cost_per_run: f64,
+
+    /// Base URL for the LLM API. Defaults to the provider's standard endpoint.
+    /// Set this to point Ollama at a non-default host/port, e.g. "http://10.0.0.5:11434".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -287,6 +293,7 @@ impl Default for AIConfig {
             model: default_model(),
             api_key: None,
             max_cost_per_run: default_max_cost(),
+            base_url: None,
         }
     }
 }

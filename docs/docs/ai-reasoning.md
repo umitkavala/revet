@@ -75,16 +75,39 @@ revet review --ai
 revet review --full . --ai --max-cost 0.50
 ```
 
+## Ollama (local, free)
+
+Run AI reasoning completely offline with a locally-running [Ollama](https://ollama.com) instance. No API key, no cost.
+
+```bash
+ollama pull llama3.2        # or any model you prefer
+ollama serve                # starts on http://localhost:11434 by default
+```
+
+```toml
+[ai]
+provider = "ollama"
+model    = "llama3.2"
+# base_url = "http://localhost:11434"  # default; override if running elsewhere
+```
+
+```bash
+revet review --ai
+```
+
+Cost is always `$0.00`. The cost cap (`max_cost_per_run`) is not checked for Ollama. If Ollama is not running or the model is not pulled, the call will fail with an error.
+
 ## Configuration reference
 
 All `[ai]` fields in `.revet.toml`:
 
 ```toml
 [ai]
-provider           = "anthropic"                  # "anthropic" | "openai"
+provider           = "anthropic"                  # "anthropic" | "openai" | "ollama"
 model              = "claude-sonnet-4-20250514"   # any model your key has access to
-api_key            = ""                           # leave blank to use env var
-max_cost_per_run   = 1.00                         # USD cap; 0 = unlimited
+api_key            = ""                           # leave blank to use env var (not needed for ollama)
+max_cost_per_run   = 1.00                         # USD cap; ignored for ollama
+base_url           = ""                           # override API base URL (useful for ollama or proxies)
 ```
 
 ### Anthropic models
