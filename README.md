@@ -45,6 +45,7 @@ revet review --fix
 | `revet baseline` | Snapshot findings so future reviews only report new ones |
 | `revet watch` | Watch for file changes and analyze continuously |
 | `revet explain <ID>` | Explain a finding (e.g. `revet explain SEC-001`) |
+| `revet review --post-comment` | Post findings as inline GitHub PR review comments |
 
 ## Language Parsers
 
@@ -62,6 +63,7 @@ Revet uses [Tree-sitter](https://tree-sitter.github.io/tree-sitter/) for fast, a
 | Ruby | `.rb`, `.rake`, `.gemspec` | Classes, modules, mixins, attr_accessors |
 | PHP | `.php` | Classes, traits, enums, namespaces, attributes |
 | Swift | `.swift` | Classes, structs, protocols, extensions, enums |
+| C/C++ | `.c`, `.h`, `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hxx` | Functions, structs, C++ classes with inheritance, `#include` imports, macros, call graph |
 
 ## Domain Analyzers
 
@@ -278,6 +280,21 @@ api_key = "sk-..."              # or set ANTHROPIC_API_KEY env var
     modules_infra: true           # enable infra checks
     modules_async_patterns: true  # enable async checks
 ```
+
+#### Inline PR Review Comments
+
+Post findings directly as inline comments on the changed lines of a pull request:
+
+```yaml
+- name: Run revet and post PR comments
+  run: revet review --full --post-comment
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    GITHUB_PR_NUMBER: ${{ github.event.number }}
+    # GITHUB_REPOSITORY and GITHUB_SHA are set automatically by GitHub Actions
+```
+
+Revet posts each finding as an inline review comment on the exact line where the issue was found. On re-runs, already-posted comments are deduplicated automatically.
 
 ## Architecture
 
