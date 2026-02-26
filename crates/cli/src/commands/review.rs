@@ -9,6 +9,7 @@ use revet_core::{
     Finding, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore, ImpactAnalysis,
     ParserDispatcher, RevetConfig, ReviewSummary, Severity,
 };
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
@@ -64,6 +65,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
     // ── 3. Parse (incremental, cache-aware) ──────────────────────
     eprint!("  Building code graph... ");
+    let _ = std::io::stderr().flush();
     let graph_start = Instant::now();
 
     let file_cache = FileGraphCache::new(&repo_path);
@@ -88,6 +90,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
     if let Some(baseline) = old_graph {
         eprint!("  Running impact analysis... ");
+        let _ = std::io::stderr().flush();
         let impact_start = Instant::now();
 
         let analysis = ImpactAnalysis::new(baseline, graph.clone());
@@ -156,6 +159,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
     // ── 4b. Domain Analyzers ─────────────────────────────────────
     eprint!("  Running domain analyzers... ");
+    let _ = std::io::stderr().flush();
     let analyzer_start = Instant::now();
     let analyzer_findings = analyzer_dispatcher.run_all_parallel(&files, &repo_path, &config);
     let analyzer_count = analyzer_findings.len();
@@ -169,6 +173,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
     // ── 4b'. Graph analyzers ─────────────────────────────────────────
     eprint!("  Running graph analyzers... ");
+    let _ = std::io::stderr().flush();
     let ga_start = Instant::now();
     let graph_findings = analyzer_dispatcher.run_graph_analyzers(&graph, &config);
     let graph_count = graph_findings.len();
@@ -188,25 +193,27 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
                 matches!(f.severity, Severity::Warning | Severity::Error) && f.suggestion.is_none()
             })
             .count();
-        eprintln!("  Running AI reasoning ({} findings)...", eligible);
+        eprint!("  Running AI reasoning ({} findings)... ", eligible);
+        let _ = std::io::stderr().flush();
         let ai_start = Instant::now();
         let reasoner = AiReasoner::new(config.ai.clone(), cli.max_cost);
         match reasoner.enrich(&mut findings, &repo_path) {
             Ok(stats) => eprintln!(
-                "  {} — {} enriched, {} likely false positives (${:.4}, {:.1}s)",
-                "AI done".green(),
+                "{} — {} enriched, {} false positives (${:.4}, {:.1}s)",
+                "done".green(),
                 stats.findings_enriched,
                 stats.false_positives,
                 stats.cost_usd,
                 ai_start.elapsed().as_secs_f64()
             ),
-            Err(e) => eprintln!("  {}: {}", "AI warn".yellow(), e),
+            Err(e) => eprintln!("{}: {}", "warn".yellow(), e),
         }
     }
 
     // ── 4d. Apply fixes ───────────────────────────────────────────
     if cli.fix {
         eprint!("  Applying fixes... ");
+        let _ = std::io::stderr().flush();
         match apply_fixes(&findings) {
             Ok(report) => eprintln!(
                 "{} ({} applied, {} suggestion-only)",
@@ -454,6 +461,7 @@ fn full_scan(
     config: &RevetConfig,
 ) -> Result<Vec<PathBuf>> {
     eprint!("  Discovering files (full scan)... ");
+    let _ = std::io::stderr().flush();
     let files = if filenames.is_empty() {
         discover_files(repo_path, extensions, &config.ignore.paths)?
     } else {
@@ -671,6 +679,7 @@ fn post_github_comments(findings: &[Finding], repo_path: &Path, cli: &crate::Cli
         diff_findings.len(),
         ctx.pr_number
     );
+    let _ = std::io::stderr().flush();
 
     match github_comment::post_review_comments(&diff_findings, repo_path, &ctx) {
         Ok((posted, off_diff, dupes)) => {
