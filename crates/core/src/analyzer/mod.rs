@@ -15,6 +15,7 @@ pub mod error_handling;
 pub mod infra;
 pub mod insecure_deserialization;
 pub mod ml_pipeline;
+pub mod path_traversal;
 pub mod react_hooks;
 pub mod secret_exposure;
 pub mod sql_injection;
@@ -91,6 +92,7 @@ impl AnalyzerDispatcher {
                 Box::new(command_injection::CommandInjectionAnalyzer::new()),
                 Box::new(insecure_deserialization::InsecureDeserializationAnalyzer::new()),
                 Box::new(ssrf::SsrfAnalyzer::new()),
+                Box::new(path_traversal::PathTraversalAnalyzer::new()),
                 Box::new(ml_pipeline::MlPipelineAnalyzer::new()),
                 Box::new(infra::InfraAnalyzer::new()),
                 Box::new(react_hooks::ReactHooksAnalyzer::new()),

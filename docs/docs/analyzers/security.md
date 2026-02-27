@@ -157,3 +157,54 @@ resp = requests.get("https://api.example.com/data")
 ```
 
 **Suppression:** Add `# revet-ignore SSRF` on the line if the URL is validated and allowlisted before use.
+
+## Path Traversal — `PATH-`
+
+Detects unsanitized user input flowing into file system operations (CWE-22). Covers Python, JavaScript/TypeScript, PHP, Go, and Java.
+
+| Finding | Severity | What it matches |
+|---------|----------|-----------------|
+| `PATH-001` | Error | `open(f"...")` with f-string path (Python) |
+| `PATH-002` | Error | `open(... + "../")` with `../` traversal sequence (Python) |
+| `PATH-003` | Warning | `os.path.join(variable, ...)` with variable first argument (Python) |
+| `PATH-004` | Error | `Path(f"...")` pathlib with f-string argument (Python) |
+| `PATH-005` | Error | `fs.readFile/writeFile/appendFile` with template literal path (JS/TS) |
+| `PATH-006` | Warning | `fs.readFile/writeFile/appendFile` with variable path (JS/TS) |
+| `PATH-007` | Error | `path.join()` with template literal segment (JS/TS) |
+| `PATH-008` | Error | `path.join()` with `../` sequence (JS/TS) |
+| `PATH-009` | Error | `include/require($variable)` — LFI risk (PHP) |
+| `PATH-010` | Error | `file_get_contents($_GET/POST/REQUEST/COOKIE/SERVER)` (PHP) |
+| `PATH-011` | Warning | `file_get_contents($variable)` (PHP) |
+| `PATH-012` | Error | `os.Open/ReadFile(fmt.Sprintf(...))` (Go) |
+| `PATH-013` | Warning | `os.Open/ReadFile(variable)` (Go) |
+| `PATH-014` | Error | `new File("..." + variable)` string concatenation (Java) |
+| `PATH-015` | Warning | `Paths.get(variable)` with variable argument (Java) |
+
+**Error** severity = explicit interpolation or `../` traversal sequences.
+**Warning** severity = variable path (may be internally controlled — review context).
+
+```python
+# Bad — flagged (Error)
+with open(f"/data/{filename}") as f: ...
+p = Path(f"/uploads/{user_file}")
+
+# Bad — flagged (Warning)
+full_path = os.path.join(user_dir, filename)
+
+# Good — not flagged
+with open("config/settings.toml") as f: ...
+```
+
+```javascript
+// Bad — flagged (Error)
+fs.readFile(`/uploads/${req.params.name}`, callback);
+const p = path.join(root, '../', userInput);
+
+// Bad — flagged (Warning)
+fs.readFile(filePath, 'utf8', callback);
+
+// Good — not flagged
+fs.readFile("./config/settings.json", "utf8", callback);
+```
+
+**Suppression:** Add `# revet-ignore PATH` on the line if the path is validated and canonicalized before use.
