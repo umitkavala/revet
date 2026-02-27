@@ -18,6 +18,7 @@ pub mod ml_pipeline;
 pub mod react_hooks;
 pub mod secret_exposure;
 pub mod sql_injection;
+pub mod ssrf;
 pub mod toolchain;
 pub mod unused_exports;
 
@@ -89,6 +90,7 @@ impl AnalyzerDispatcher {
                 Box::new(sql_injection::SqlInjectionAnalyzer::new()),
                 Box::new(command_injection::CommandInjectionAnalyzer::new()),
                 Box::new(insecure_deserialization::InsecureDeserializationAnalyzer::new()),
+                Box::new(ssrf::SsrfAnalyzer::new()),
                 Box::new(ml_pipeline::MlPipelineAnalyzer::new()),
                 Box::new(infra::InfraAnalyzer::new()),
                 Box::new(react_hooks::ReactHooksAnalyzer::new()),

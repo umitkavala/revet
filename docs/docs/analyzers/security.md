@@ -120,3 +120,40 @@ MyDto dto = objectMapper.readValue(json, MyDto.class);
 > **Note:** `pickle.load/loads` is also detected by the [ML Pipeline](ml-pipeline) analyzer in the ML context. If both `security` and `ml` modules are enabled, pickle may produce findings from both — suppress with `# revet-ignore DESER` or `# revet-ignore ML` as appropriate.
 
 **Suppression:** Add `# revet-ignore DESER` on the offending line for known-safe or internal-only deserialization.
+
+## SSRF — `SSRF-`
+
+Detects HTTP client calls where the URL is not a hardcoded string literal — a variable or interpolated string that could be influenced by user input. Covers Python, JavaScript/TypeScript, Go, and Java.
+
+| Finding | Severity | What it matches |
+|---------|----------|-----------------|
+| `SSRF-001` | Error | `requests.*()` with f-string URL (Python) |
+| `SSRF-002` | Warning | `requests.*()` with variable URL (Python) |
+| `SSRF-003` | Error | `urllib.urlopen()` with f-string URL (Python) |
+| `SSRF-004` | Warning | `urllib.urlopen()` with variable URL (Python) |
+| `SSRF-005` | Error | `httpx.*()` with f-string URL (Python) |
+| `SSRF-006` | Warning | `httpx.*()` with variable URL (Python) |
+| `SSRF-007` | Error | `fetch()` with template literal URL (JS/TS) |
+| `SSRF-008` | Warning | `fetch()` with variable URL (JS/TS) |
+| `SSRF-009` | Error | `axios.*()` with template literal URL (JS/TS) |
+| `SSRF-010` | Warning | `axios.*()` with variable URL (JS/TS) |
+| `SSRF-011` | Warning | `http.Get/Post/Head()` with variable URL (Go) |
+| `SSRF-012` | Error | `http.Get/Post/Head(fmt.Sprintf(...))` (Go) |
+| `SSRF-013` | Warning | `new URL(variable)` (Java) |
+| `SSRF-014` | Error | `new URL("..." + variable)` concatenation (Java) |
+
+**Error** severity = explicit interpolation (f-string / template literal / concatenation).
+**Warning** severity = variable URL (may be internally controlled — review context).
+
+```python
+# Bad — flagged (Error)
+resp = requests.get(f"http://internal/{user_input}")
+
+# Bad — flagged (Warning)
+resp = requests.get(target_url)
+
+# Good — not flagged
+resp = requests.get("https://api.example.com/data")
+```
+
+**Suppression:** Add `# revet-ignore SSRF` on the line if the URL is validated and allowlisted before use.
