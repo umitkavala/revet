@@ -18,6 +18,7 @@ pub mod ml_pipeline;
 pub mod path_traversal;
 pub mod react_hooks;
 pub mod secret_exposure;
+pub mod sensitive_logging;
 pub mod sql_injection;
 pub mod ssrf;
 pub mod toolchain;
@@ -93,6 +94,7 @@ impl AnalyzerDispatcher {
                 Box::new(insecure_deserialization::InsecureDeserializationAnalyzer::new()),
                 Box::new(ssrf::SsrfAnalyzer::new()),
                 Box::new(path_traversal::PathTraversalAnalyzer::new()),
+                Box::new(sensitive_logging::SensitiveLoggingAnalyzer::new()),
                 Box::new(ml_pipeline::MlPipelineAnalyzer::new()),
                 Box::new(infra::InfraAnalyzer::new()),
                 Box::new(react_hooks::ReactHooksAnalyzer::new()),

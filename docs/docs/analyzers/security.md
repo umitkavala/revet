@@ -218,3 +218,45 @@ fs.readFile("./config/settings.json", "utf8", callback);
 ```
 
 **Suppression:** Add `# revet-ignore PATH` on the line if the path is validated and canonicalized before use.
+
+## Sensitive Data in Logs — `LOG-`
+
+Detects credentials and secrets passed to logging or print calls (CWE-532). Log files are often
+forwarded to third-party aggregators and stored long-term, making them a secondary exposure risk.
+Covers Python, JavaScript/TypeScript, PHP, Go, Java, and Ruby.
+
+| Finding | Severity | What it matches |
+|---------|----------|-----------------|
+| `LOG-001` | Warning | Sensitive variable in Python `logging.*` / `log.*` / `logger.*` call |
+| `LOG-002` | Warning | Sensitive variable in Python `print()` |
+| `LOG-003` | Warning | Sensitive variable in JS/TS `console.*` |
+| `LOG-004` | Warning | Sensitive variable in JS/TS `logger.*` |
+| `LOG-005` | Warning | Sensitive variable in Go `fmt.Print*` / `log.Print*` |
+| `LOG-006` | Warning | Sensitive variable in Java `System.out.println` / `logger.*` |
+| `LOG-007` | Warning | Sensitive variable in PHP `error_log()` / `var_dump()` |
+| `LOG-008` | Warning | Sensitive variable in Ruby `puts` / `p` / `pp` |
+
+Sensitive variable names detected: `password`, `passwd`, `pwd`, `secret`, `token`, `api_key`,
+`credential`, `auth_key`, `private_key` (and camelCase equivalents for Go/Java).
+
+```python
+# Bad — flagged
+logging.debug(password)
+logging.info(f"token={token}")
+print(api_key)
+
+# Good — not flagged
+logging.info("Login successful for user %s", username)
+logging.debug("Request count: %d", count)
+```
+
+```javascript
+// Bad — flagged
+console.log(password);
+logger.info({ token });
+
+// Good — not flagged
+console.log("Server listening on port", port);
+```
+
+**Suppression:** Add `# revet-ignore LOG` on the line if the value is intentionally redacted before logging.
