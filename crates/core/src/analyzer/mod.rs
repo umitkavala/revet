@@ -13,6 +13,7 @@ pub mod dead_imports;
 pub mod dependency;
 pub mod error_handling;
 pub mod infra;
+pub mod insecure_deserialization;
 pub mod ml_pipeline;
 pub mod react_hooks;
 pub mod secret_exposure;
@@ -87,6 +88,7 @@ impl AnalyzerDispatcher {
                 Box::new(secret_exposure::SecretExposureAnalyzer::new()),
                 Box::new(sql_injection::SqlInjectionAnalyzer::new()),
                 Box::new(command_injection::CommandInjectionAnalyzer::new()),
+                Box::new(insecure_deserialization::InsecureDeserializationAnalyzer::new()),
                 Box::new(ml_pipeline::MlPipelineAnalyzer::new()),
                 Box::new(infra::InfraAnalyzer::new()),
                 Box::new(react_hooks::ReactHooksAnalyzer::new()),

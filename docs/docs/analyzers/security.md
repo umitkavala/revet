@@ -80,3 +80,43 @@ execFile("git", ["clone", repoUrl, "/tmp/repo"]);
 ```
 
 **Suppression:** Add `# revet-ignore CMD` on the offending line if the input is validated.
+
+## Insecure Deserialization — `DESER-`
+
+Detects unsafe deserialization of untrusted data, which can lead to Remote Code Execution. Covers Python, PHP, Java, and Ruby.
+
+| Finding | Severity | What it matches |
+|---------|----------|-----------------|
+| `DESER-001` | Error | `yaml.load()` without `SafeLoader` or `BaseLoader` (Python) |
+| `DESER-002` | Error | `pickle.load()` / `pickle.loads()` (Python) |
+| `DESER-003` | Error | `cPickle.load()` / `cPickle.loads()` (Python) |
+| `DESER-004` | Error | `marshal.loads()` (Python) |
+| `DESER-005` | Error | `jsonpickle.decode()` (Python) |
+| `DESER-006` | Error | `unserialize()` (PHP) |
+| `DESER-007` | Error | `new ObjectInputStream(` (Java) |
+| `DESER-008` | Error | `Marshal.load()` (Ruby) |
+| `DESER-009` | Warning | `YAML.load()` without `safe_load` (Ruby) |
+
+**Fix:** Use safe alternatives that cannot instantiate arbitrary objects.
+
+```python
+# Bad — flagged
+data = yaml.load(stream)
+obj  = pickle.loads(request.body)
+
+# Good — safe
+data = yaml.safe_load(stream)
+obj  = json.loads(request.body)
+```
+
+```java
+// Bad — flagged
+ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
+
+// Good — use Jackson or an ObjectInputFilter allowlist
+MyDto dto = objectMapper.readValue(json, MyDto.class);
+```
+
+> **Note:** `pickle.load/loads` is also detected by the [ML Pipeline](ml-pipeline) analyzer in the ML context. If both `security` and `ml` modules are enabled, pickle may produce findings from both — suppress with `# revet-ignore DESER` or `# revet-ignore ML` as appropriate.
+
+**Suppression:** Add `# revet-ignore DESER` on the offending line for known-safe or internal-only deserialization.
