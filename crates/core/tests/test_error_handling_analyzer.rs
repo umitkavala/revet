@@ -400,6 +400,131 @@ func main() {
     assert!(findings[0].message.contains("Discarded error"));
 }
 
+// ── ERR-005: .expect() non-descriptive message ──────────────────
+
+#[test]
+fn test_expect_with_empty_message() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(&dir, "lib.rs", r#"let x = file.open().expect("");"#);
+    let findings = ErrorHandlingAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        "empty .expect() must be flagged; got: {findings:?}"
+    );
+    assert_eq!(findings[0].severity, Severity::Warning);
+    assert!(findings[0].message.contains("non-descriptive"));
+}
+
+#[test]
+fn test_expect_with_error_message() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(&dir, "main.rs", r#"let cfg = load().expect("error");"#);
+    let findings = ErrorHandlingAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        ".expect(\"error\") must be flagged; got: {findings:?}"
+    );
+}
+
+#[test]
+fn test_expect_with_failed_message() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "server.rs",
+        r#"let conn = db.connect().expect("failed");"#,
+    );
+    let findings = ErrorHandlingAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+}
+
+#[test]
+fn test_expect_with_descriptive_message_no_finding() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "main.rs",
+        r#"let cfg = load_config().expect("Failed to load config file");"#,
+    );
+    let findings = ErrorHandlingAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.is_empty(),
+        "descriptive .expect() must not be flagged; got: {findings:?}"
+    );
+}
+
+#[test]
+fn test_expect_not_flagged_in_test_file() {
+    let dir = TempDir::new().unwrap();
+    // File under tests/ — Rust-specific patterns skipped
+    let file = write_temp_file(
+        &dir,
+        "tests/integration.rs",
+        r#"let x = foo().expect("error");"#,
+    );
+    let findings = ErrorHandlingAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.is_empty(),
+        ".expect() in tests/ must not be flagged; got: {findings:?}"
+    );
+}
+
+// ── Test-context exclusion (Rust) ───────────────────────────────
+
+#[test]
+fn test_unwrap_after_test_attr_not_flagged() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "lib.rs",
+        "#[test]\nfn my_test() {\n    let x = foo().unwrap();\n}\n",
+    );
+    let findings = ErrorHandlingAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.is_empty(),
+        "unwrap() inside #[test] fn must not be flagged; got: {findings:?}"
+    );
+}
+
+#[test]
+fn test_unwrap_after_cfg_test_not_flagged() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "lib.rs",
+        "#[cfg(test)]\nmod tests {\n    fn it() { let x = foo().unwrap(); }\n}\n",
+    );
+    let findings = ErrorHandlingAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.is_empty(),
+        "unwrap() inside #[cfg(test)] must not be flagged; got: {findings:?}"
+    );
+}
+
+#[test]
+fn test_panic_not_flagged_in_tests_dir() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(&dir, "tests/my_test.rs", "panic!(\"expected failure\");\n");
+    let findings = ErrorHandlingAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.is_empty(),
+        "panic!() in tests/ dir must not be flagged; got: {findings:?}"
+    );
+}
+
+#[test]
+fn test_expect_not_flagged_in_spec_file() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(&dir, "my_module_spec.rs", r#"foo().expect("error");"#);
+    let findings = ErrorHandlingAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.is_empty(),
+        "expect in *_spec.rs must not be flagged; got: {findings:?}"
+    );
+}
+
 // ── Edge cases ──────────────────────────────────────────────────
 
 #[test]

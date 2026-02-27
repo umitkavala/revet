@@ -18,6 +18,10 @@ struct ErrorPattern {
     severity: Severity,
     /// If set, skip the match when the line contains this substring
     reject_if_contains: Option<&'static str>,
+    /// File extensions this pattern applies to (empty = all scanned extensions)
+    extensions: &'static [&'static str],
+    /// If true, skip this pattern when the file is a test file
+    skip_in_test_files: bool,
     suggestion: &'static str,
     fix_kind: FixKind,
 }
@@ -28,12 +32,13 @@ fn patterns() -> &'static [ErrorPattern] {
     PATTERNS.get_or_init(|| {
         vec![
             // ERR-001: Empty catch/except block (multi-language)
-            // Matches: catch (...) { } or except ...: pass or catch { } etc.
             ErrorPattern {
                 name: "Empty catch/except block",
                 regex: Regex::new(r"(?:catch\s*(?:\([^)]*\))?\s*\{\s*\}|except[^:]*:\s*(?:pass\s*$))").unwrap(),
                 severity: Severity::Warning,
                 reject_if_contains: None,
+                extensions: &[],
+                skip_in_test_files: false,
                 suggestion: "Handle the error or add a comment explaining why it is safe to ignore",
                 fix_kind: FixKind::Suggestion,
             },
@@ -43,16 +48,20 @@ fn patterns() -> &'static [ErrorPattern] {
                 regex: Regex::new(r"^\s*except\s*:").unwrap(),
                 severity: Severity::Warning,
                 reject_if_contains: None,
+                extensions: &["py"],
+                skip_in_test_files: false,
                 suggestion: "Specify an exception type: except ValueError: or except Exception as e:",
                 fix_kind: FixKind::Suggestion,
             },
-            // ERR-003: .unwrap() in Rust
+            // ERR-003: .unwrap() in Rust (skip test files)
             ErrorPattern {
                 name: ".unwrap() call",
                 regex: Regex::new(r"\.unwrap\(\)").unwrap(),
                 severity: Severity::Warning,
                 reject_if_contains: None,
-                suggestion: "Use ? operator, .unwrap_or(), .unwrap_or_else(), or .expect() with a message",
+                extensions: &["rs"],
+                skip_in_test_files: true,
+                suggestion: "Use ? operator, .unwrap_or(), .unwrap_or_else(), or .expect() with a descriptive message",
                 fix_kind: FixKind::Suggestion,
             },
             // ERR-004: panic!()/todo!()/unimplemented!() in non-test Rust code
@@ -60,43 +69,67 @@ fn patterns() -> &'static [ErrorPattern] {
                 name: "panic!/todo!/unimplemented! in non-test code",
                 regex: Regex::new(r"\b(?:panic!|todo!|unimplemented!)\s*\(").unwrap(),
                 severity: Severity::Warning,
-                reject_if_contains: Some("#[test]"),
+                reject_if_contains: None,
+                extensions: &["rs"],
+                skip_in_test_files: true,
                 suggestion: "Return a Result with a descriptive error instead of panicking",
                 fix_kind: FixKind::Suggestion,
             },
-            // ERR-005: Catch that only logs (swallowed error)
+            // ERR-005: .expect() with a non-descriptive message in Rust
+            ErrorPattern {
+                name: ".expect() with non-descriptive message",
+                regex: Regex::new(
+                    r#"\.expect\s*\(\s*["'](?:|error|err|failed|fail|failure|oops|todo|fixme|ok|bad|wrong|none|panic|crash|broken|invalid|unexpected|unreachable|missing|unknown|test|no|yes|x|temp|hack)\s*["']\s*\)"#,
+                )
+                .unwrap(),
+                severity: Severity::Warning,
+                reject_if_contains: None,
+                extensions: &["rs"],
+                skip_in_test_files: true,
+                suggestion: "Use a descriptive message: .expect(\"Failed to open config file\")",
+                fix_kind: FixKind::Suggestion,
+            },
+            // ERR-006: Catch that only logs (swallowed error)
             ErrorPattern {
                 name: "Catch block only logs error",
                 regex: Regex::new(r"catch\s*\([^)]*\)\s*\{\s*(?:console\.(?:log|warn|error|info)|System\.(?:out|err)\.print|log(?:ger)?\.(?:error|warn|info|debug))\s*\(").unwrap(),
                 severity: Severity::Info,
                 reject_if_contains: Some("throw"),
+                extensions: &["js", "ts", "jsx", "tsx", "java"],
+                skip_in_test_files: false,
                 suggestion: "Re-throw the error or handle it properly after logging",
                 fix_kind: FixKind::Suggestion,
             },
-            // ERR-006: except Exception or except BaseException (too broad)
+            // ERR-007: except Exception or except BaseException (too broad)
             ErrorPattern {
                 name: "Too-broad exception catch",
                 regex: Regex::new(r"^\s*except\s+(?:Exception|BaseException)\b").unwrap(),
                 severity: Severity::Warning,
                 reject_if_contains: None,
+                extensions: &["py"],
+                skip_in_test_files: false,
                 suggestion: "Catch a more specific exception type (e.g. ValueError, KeyError)",
                 fix_kind: FixKind::Suggestion,
             },
-            // ERR-007: Empty .catch() callback in JS/TS
+            // ERR-008: Empty .catch() callback in JS/TS
             ErrorPattern {
                 name: "Empty .catch() callback",
                 regex: Regex::new(r"\.catch\s*\(\s*(?:\(\s*[^)]*\)\s*=>\s*\{\s*\}|\w+\s*=>\s*\{\s*\}|\(\s*\)\s*\{\s*\}|function\s*\(\s*[^)]*\)\s*\{\s*\})\s*\)").unwrap(),
                 severity: Severity::Warning,
                 reject_if_contains: None,
+                extensions: &["js", "ts", "jsx", "tsx"],
+                skip_in_test_files: false,
                 suggestion: "Handle or re-throw the error in the .catch() callback",
                 fix_kind: FixKind::Suggestion,
             },
-            // ERR-008: Discarded error in Go (_ = err)
+            // ERR-009: Discarded error in Go (_ = err)
             ErrorPattern {
                 name: "Discarded error in Go",
                 regex: Regex::new(r"_\s*=\s*err\b").unwrap(),
                 severity: Severity::Warning,
                 reject_if_contains: None,
+                extensions: &["go"],
+                skip_in_test_files: false,
                 suggestion: "Handle the error: if err != nil { return err }",
                 fix_kind: FixKind::Suggestion,
             },
@@ -131,16 +164,26 @@ impl ErrorHandlingAnalyzer {
         trimmed.starts_with("//")
             || trimmed.starts_with('*')
             || trimmed.starts_with("/*")
-            || trimmed.starts_with('#')
+            // '#' is a comment in Python/shell, but '#[' is a Rust attribute — don't skip those
+            || (trimmed.starts_with('#') && !trimmed.starts_with("#["))
     }
 
-    /// Check if a file is a test file (for ERR-004 filtering)
+    /// Check if a file is a test file — skips Rust-specific patterns
     fn is_test_file(path: &Path) -> bool {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        name.starts_with("test_")
+        // Common test file naming conventions
+        if name.starts_with("test_")
             || name.ends_with("_test.rs")
             || name.ends_with("_test.go")
-            || name.contains("test")
+            || name.ends_with("_spec.rs")
+            || name.ends_with("_spec.js")
+            || name.ends_with("_spec.ts")
+        {
+            return true;
+        }
+        // Files under a `tests/` directory (e.g. crates/core/tests/*.rs)
+        path.components()
+            .any(|c| c.as_os_str() == "tests" || c.as_os_str() == "__tests__")
     }
 
     /// Scan a single file for error handling issues
@@ -155,40 +198,61 @@ impl ErrorHandlingAnalyzer {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         let mut findings = Vec::new();
 
+        // Track Rust test context via brace depth so entire #[test]/#[cfg(test)]
+        // function/module bodies are excluded from Rust-specific patterns.
+        let mut pending_test_scope = false; // just saw a test attribute
+        let mut test_brace_depth: i32 = 0; // brace depth inside a test scope
+        let mut in_test_scope = false; // currently inside a test fn/mod body
+
         for (line_num, line) in content.lines().enumerate() {
             if Self::is_comment_line(line) {
                 continue;
             }
 
+            // Detect Rust test attribute lines
+            if ext == "rs" {
+                let t = line.trim();
+                if t == "#[test]"
+                    || t.starts_with("#[cfg(test)]")
+                    || t.starts_with("#[tokio::test]")
+                    || t.starts_with("#[async_std::test]")
+                {
+                    pending_test_scope = true;
+                }
+
+                // Once we've seen a test attribute, track brace depth to mark scope
+                if pending_test_scope || in_test_scope {
+                    let open = line.chars().filter(|&c| c == '{').count() as i32;
+                    let close = line.chars().filter(|&c| c == '}').count() as i32;
+                    if open > 0 && !in_test_scope {
+                        // First opening brace after the test attribute — enter scope
+                        in_test_scope = true;
+                        pending_test_scope = false;
+                        test_brace_depth = open - close;
+                    } else if in_test_scope {
+                        test_brace_depth += open - close;
+                        if test_brace_depth <= 0 {
+                            in_test_scope = false;
+                            test_brace_depth = 0;
+                        }
+                    }
+                }
+            }
+
+            let line_in_test_context = in_test_scope;
+
             // First matching pattern wins for this line
-            for (idx, pat) in all_patterns.iter().enumerate() {
-                // ERR-003 (.unwrap()): only for Rust files
-                if idx == 2 && ext != "rs" {
+            for pat in all_patterns.iter() {
+                // Extension gate
+                if !pat.extensions.is_empty() && !pat.extensions.contains(&ext) {
                     continue;
                 }
-                // ERR-004 (panic!/todo!/unimplemented!): only Rust, skip test files
-                if idx == 3 && (ext != "rs" || is_test) {
-                    continue;
-                }
-                // ERR-005 (catch-only-logs): only JS/TS/Java
-                if idx == 4 && !matches!(ext, "js" | "ts" | "jsx" | "tsx" | "java") {
-                    continue;
-                }
-                // ERR-002/ERR-006: only Python
-                if (idx == 1 || idx == 5) && ext != "py" {
-                    continue;
-                }
-                // ERR-007 (empty .catch()): only JS/TS
-                if idx == 6 && !matches!(ext, "js" | "ts" | "jsx" | "tsx") {
-                    continue;
-                }
-                // ERR-008 (discarded err): only Go
-                if idx == 7 && ext != "go" {
+                // Test-file gate
+                if pat.skip_in_test_files && (is_test || line_in_test_context) {
                     continue;
                 }
 
                 if pat.regex.is_match(line) {
-                    // Check reject filter
                     if let Some(reject) = pat.reject_if_contains {
                         if line.contains(reject) {
                             continue;
