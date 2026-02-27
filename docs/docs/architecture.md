@@ -30,7 +30,8 @@ Layer 2: Domain Analyzers    (regex line-by-line scanning)
   │
   ▼
 Layer 3: LLM Reasoning       (--ai flag, opt-in)
-  │   not yet implemented
+  │   cli/src/ai/mod.rs      per-finding LLM call with ±4-line snippet
+  │   cli/src/ai/client.rs   Anthropic / OpenAI / Ollama backends
   │
   ▼
 Finding pipeline

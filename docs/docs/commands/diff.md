@@ -32,3 +32,5 @@ Use `revet diff` in PR review workflows where you only want to be notified about
 | `--format` | Output format: `terminal`, `json`, `sarif`, `github` |
 | `--fail-on` | Exit non-zero threshold: `error`, `warning`, `info`, `never` |
 | `--module` | Run only specific modules (comma-separated) |
+| `--ai` | Enable LLM reasoning — see [AI Reasoning](../ai-reasoning) |
+| `--max-cost <usd>` | Cap AI spend per run in USD |

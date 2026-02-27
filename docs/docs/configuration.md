@@ -47,8 +47,9 @@ show_evidence = true
 [ai]
 provider = "anthropic"              # "anthropic" | "openai" | "ollama"
 model    = "claude-sonnet-4-20250514"
-api_key  = "sk-..."                 # or set ANTHROPIC_API_KEY env var; not needed for ollama
-# base_url = "http://localhost:11434"  # override API endpoint (ollama or proxy)
+api_key  = "sk-..."                 # or set ANTHROPIC_API_KEY / OPENAI_API_KEY env var; not needed for ollama
+max_cost_per_run = 1.00             # USD cap per run (ignored for ollama); default: 1.00
+# base_url = "http://localhost:11434"  # override API endpoint (ollama or OpenAI-compatible proxy)
 
 # Custom rules — zero or more
 [[rules]]
