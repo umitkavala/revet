@@ -199,7 +199,12 @@ fn test_no_warning_not_action() {
 #[test]
 fn test_detects_docker_latest_tag() {
     let dir = TempDir::new().unwrap();
-    let file = write_temp_file(&dir, "Dockerfile", "FROM node:latest\n");
+    // Include USER so only the :latest finding fires
+    let file = write_temp_file(
+        &dir,
+        "Dockerfile",
+        "FROM node:latest\nRUN useradd -m app\nUSER app\n",
+    );
 
     let analyzer = InfraAnalyzer::new();
     let findings = analyzer.analyze_files(&[file], dir.path());
@@ -212,7 +217,12 @@ fn test_detects_docker_latest_tag() {
 #[test]
 fn test_detects_docker_no_tag() {
     let dir = TempDir::new().unwrap();
-    let file = write_temp_file(&dir, "Dockerfile", "FROM ubuntu\n");
+    // Include USER so only the untagged FROM finding fires
+    let file = write_temp_file(
+        &dir,
+        "Dockerfile",
+        "FROM ubuntu\nRUN useradd -m app\nUSER app\n",
+    );
 
     let analyzer = InfraAnalyzer::new();
     let findings = analyzer.analyze_files(&[file], dir.path());
@@ -225,6 +235,7 @@ fn test_detects_docker_no_tag() {
 #[test]
 fn test_no_warning_docker_scratch() {
     let dir = TempDir::new().unwrap();
+    // FROM scratch is a special case: no USER needed (scratch has no shell)
     let file = write_temp_file(&dir, "Dockerfile", "FROM scratch\n");
 
     let analyzer = InfraAnalyzer::new();
@@ -240,7 +251,12 @@ fn test_no_warning_docker_scratch() {
 #[test]
 fn test_no_warning_docker_pinned_tag() {
     let dir = TempDir::new().unwrap();
-    let file = write_temp_file(&dir, "Dockerfile", "FROM node:18-alpine\n");
+    // Include USER so no findings are expected
+    let file = write_temp_file(
+        &dir,
+        "Dockerfile",
+        "FROM node:18-alpine\nRUN adduser -D app\nUSER app\n",
+    );
 
     let analyzer = InfraAnalyzer::new();
     let findings = analyzer.analyze_files(&[file], dir.path());
@@ -264,9 +280,19 @@ fn test_detects_privileged_container() {
     let analyzer = InfraAnalyzer::new();
     let findings = analyzer.analyze_files(&[file], dir.path());
 
-    assert_eq!(findings.len(), 1);
-    assert_eq!(findings[0].severity, Severity::Warning);
-    assert!(findings[0].message.contains("privileged container"));
+    // The privileged finding plus missing-probe/resource findings will all fire;
+    // assert the privileged finding is present with correct severity.
+    assert!(
+        findings
+            .iter()
+            .any(|f| f.message.contains("privileged container")),
+        "privileged container must be flagged; got: {findings:?}"
+    );
+    let priv_finding = findings
+        .iter()
+        .find(|f| f.message.contains("privileged container"))
+        .unwrap();
+    assert_eq!(priv_finding.severity, Severity::Warning);
 }
 
 #[test]
@@ -368,6 +394,199 @@ fn test_skips_comment_lines() {
         findings.is_empty(),
         "Comment lines should not trigger, got: {:?}",
         findings
+    );
+}
+
+// ── K8s image :latest ──────────────────────────────────────────
+
+#[test]
+fn test_k8s_image_latest_tag() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "deployment.yaml",
+        "spec:\n  containers:\n  - name: app\n    image: nginx:latest\n",
+    );
+    let findings = InfraAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        4,
+        "expected image:latest + missing probes/resources; got: {findings:?}"
+    );
+    assert!(findings.iter().any(|f| f.message.contains(":latest")));
+}
+
+#[test]
+fn test_k8s_image_pinned_no_finding() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "deployment.yaml",
+        "spec:\n  containers:\n  - name: app\n    image: nginx:1.25.3\n    readinessProbe:\n      httpGet:\n        path: /health\n    livenessProbe:\n      httpGet:\n        path: /health\n    resources:\n      limits:\n        cpu: 500m\n",
+    );
+    let findings = InfraAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.iter().all(|f| !f.message.contains(":latest")),
+        "pinned image must not be flagged; got: {findings:?}"
+    );
+}
+
+// ── K8s missing probes / resource limits ───────────────────────
+
+#[test]
+fn test_k8s_missing_readiness_probe() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "deploy.yaml",
+        "spec:\n  containers:\n  - name: app\n    image: myapp:1.0\n    livenessProbe:\n      httpGet:\n        path: /health\n    resources:\n      limits:\n        cpu: 500m\n",
+    );
+    let findings = InfraAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        "expected only missing readinessProbe; got: {findings:?}"
+    );
+    assert!(findings[0].message.contains("readinessProbe"));
+    assert_eq!(findings[0].severity, Severity::Warning);
+}
+
+#[test]
+fn test_k8s_missing_liveness_probe() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "deploy.yaml",
+        "spec:\n  containers:\n  - name: app\n    image: myapp:1.0\n    readinessProbe:\n      httpGet:\n        path: /health\n    resources:\n      limits:\n        cpu: 500m\n",
+    );
+    let findings = InfraAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        "expected only missing livenessProbe; got: {findings:?}"
+    );
+    assert!(findings[0].message.contains("livenessProbe"));
+}
+
+#[test]
+fn test_k8s_missing_resource_limits() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "deploy.yaml",
+        "spec:\n  containers:\n  - name: app\n    image: myapp:1.0\n    readinessProbe:\n      httpGet:\n        path: /health\n    livenessProbe:\n      httpGet:\n        path: /health\n",
+    );
+    let findings = InfraAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        "expected only missing resources; got: {findings:?}"
+    );
+    assert!(findings[0].message.contains("resource"));
+}
+
+#[test]
+fn test_k8s_no_containers_no_probe_finding() {
+    // Non-deployment YAML (e.g. ConfigMap) should not trigger missing-probe findings
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "configmap.yaml",
+        "apiVersion: v1\nkind: ConfigMap\ndata:\n  key: value\n",
+    );
+    let findings = InfraAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings
+            .iter()
+            .all(|f| !f.message.contains("Probe") && !f.message.contains("resource")),
+        "ConfigMap must not trigger missing-probe findings; got: {findings:?}"
+    );
+}
+
+// ── Docker ADD / USER / COPY . . ───────────────────────────────
+
+#[test]
+fn test_docker_add_instruction() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "Dockerfile",
+        "FROM ubuntu:22.04\nADD ./app /app\nUSER appuser\n",
+    );
+    let findings = InfraAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.iter().any(|f| f.message.contains("ADD")),
+        "ADD must be flagged; got: {findings:?}"
+    );
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|f| f.message.contains("ADD"))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn test_docker_user_root() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "Dockerfile",
+        "FROM ubuntu:22.04\nRUN apt-get update\nUSER root\n",
+    );
+    let findings = InfraAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.iter().any(|f| f.message.contains("root")),
+        "USER root must be flagged; got: {findings:?}"
+    );
+}
+
+#[test]
+fn test_docker_copy_dot_dot() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "Dockerfile",
+        "FROM node:20\nCOPY . .\nRUN npm install\nUSER node\n",
+    );
+    let findings = InfraAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.iter().any(|f| f.message.contains("COPY . .")),
+        "COPY . . must be flagged; got: {findings:?}"
+    );
+}
+
+#[test]
+fn test_docker_missing_user_instruction() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "Dockerfile",
+        "FROM python:3.11\nRUN pip install flask\nCMD [\"python\", \"app.py\"]\n",
+    );
+    let findings = InfraAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.iter().any(|f| f.message.contains("non-root USER")),
+        "missing USER must be flagged; got: {findings:?}"
+    );
+    assert_eq!(findings[0].severity, Severity::Warning);
+}
+
+#[test]
+fn test_docker_non_root_user_no_finding() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "Dockerfile",
+        "FROM python:3.11\nRUN useradd -m appuser\nUSER appuser\nCMD [\"python\", \"app.py\"]\n",
+    );
+    let findings = InfraAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings
+            .iter()
+            .all(|f| !f.message.contains("non-root USER")),
+        "non-root USER must not trigger missing-user finding; got: {findings:?}"
     );
 }
 

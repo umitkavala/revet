@@ -20,11 +20,19 @@ Off by default (`modules.infra = true` to enable). Scans Terraform, Kubernetes, 
 |---------|----------|---------|
 | `INFRA-004` | Error | Privileged container (`privileged: true`) |
 | `INFRA-005` | Warning | `hostPath` volume mount |
-| `INFRA-006` | Warning | No resource limits defined |
+| `INFRA-006` | Warning | `image: *:latest` tag in pod spec |
+| `INFRA-007` | Warning | Missing `readinessProbe` (pod receives traffic before ready) |
+| `INFRA-008` | Warning | Missing `livenessProbe` (stuck pods won't be restarted) |
+| `INFRA-009` | Warning | Missing `resources` limits/requests (noisy-neighbour risk) |
 
 ## Docker
 
 | Finding | Severity | Pattern |
 |---------|----------|---------|
-| `INFRA-007` | Warning | `ADD` with remote URL (use `RUN curl` instead) |
-| `INFRA-008` | Info | `latest` tag in `FROM` |
+| `INFRA-010` | Warning | `FROM *:latest` or untagged base image |
+| `INFRA-011` | Warning | `ADD` instruction (use `COPY` unless tar-extraction is needed) |
+| `INFRA-012` | Warning | `USER root` — container runs as root |
+| `INFRA-013` | Warning | `COPY . .` — entire build context copied (may include `.env`/secrets) |
+| `INFRA-014` | Warning | No `USER` instruction — image defaults to running as root |
+
+**Note:** `FROM scratch` is excluded from the missing-USER check (no shell or user management).

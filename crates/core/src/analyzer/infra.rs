@@ -11,6 +11,38 @@ use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+// ── Compiled regexes for file-level K8s / Dockerfile checks ──────────────────
+
+fn re_k8s_containers() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^\s*containers:\s*$").unwrap())
+}
+
+fn re_k8s_readiness() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"readinessProbe:").unwrap())
+}
+
+fn re_k8s_liveness() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"livenessProbe:").unwrap())
+}
+
+fn re_k8s_resources() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^\s*resources:").unwrap())
+}
+
+fn re_dockerfile_user() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)^USER\s+").unwrap())
+}
+
+fn re_dockerfile_user_root() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)^USER\s+(?:root|0)\s*$").unwrap())
+}
+
 /// A compiled infrastructure detection pattern
 struct InfraPattern {
     name: &'static str,
@@ -118,8 +150,52 @@ fn patterns() -> &'static [InfraPattern] {
                 suggestion: "Use emptyDir, configMap, or PVC instead of hostPath volumes",
                 fix_kind: FixKind::Suggestion,
             },
+            // Pattern 8: K8s image :latest tag in pod spec
+            InfraPattern {
+                name: "K8s container image pinned to :latest (non-reproducible deploy)",
+                regex: Regex::new(r"^\s*image:\s+\S+:latest\s*$").unwrap(),
+                severity: Severity::Warning,
+                reject_if_contains: None,
+                target_extensions: &["yaml", "yml"],
+                target_filenames: &[],
+                suggestion: "Pin the image to a specific digest or version tag (e.g. nginx:1.25.3)",
+                fix_kind: FixKind::Suggestion,
+            },
+            // Pattern 9: Docker ADD instruction (implicit tar extraction / remote URL risk)
+            InfraPattern {
+                name: "Docker ADD instruction (use COPY unless tar-extraction is needed)",
+                regex: Regex::new(r"(?i)^ADD\s+").unwrap(),
+                severity: Severity::Warning,
+                reject_if_contains: None,
+                target_extensions: &[],
+                target_filenames: &["Dockerfile"],
+                suggestion: "Use COPY instead of ADD; ADD silently extracts tarballs and can fetch remote URLs",
+                fix_kind: FixKind::Suggestion,
+            },
+            // Pattern 10: Docker USER root
+            InfraPattern {
+                name: "Docker USER root (container runs as root)",
+                regex: Regex::new(r"(?i)^USER\s+(?:root|0)\s*$").unwrap(),
+                severity: Severity::Warning,
+                reject_if_contains: None,
+                target_extensions: &[],
+                target_filenames: &["Dockerfile"],
+                suggestion: "Create and switch to a non-root user: RUN useradd -m appuser && USER appuser",
+                fix_kind: FixKind::Suggestion,
+            },
+            // Pattern 11: Docker COPY . . (copies .env, secrets, entire repo into image)
+            InfraPattern {
+                name: "Docker COPY . . copies entire context (may include .env or secrets)",
+                regex: Regex::new(r"(?i)^COPY\s+\.\s+[./]").unwrap(),
+                severity: Severity::Warning,
+                reject_if_contains: None,
+                target_extensions: &[],
+                target_filenames: &["Dockerfile"],
+                suggestion: "Use a .dockerignore file to exclude .env, secrets, and other sensitive files",
+                fix_kind: FixKind::Suggestion,
+            },
             // ── Info: best practice ──────────────────────────────────────
-            // Pattern 8: HTTP backend/source URL
+            // Pattern 12: HTTP backend/source URL
             InfraPattern {
                 name: "HTTP URL in Terraform config (use HTTPS)",
                 regex: Regex::new(r#"(?:source|endpoint|url)\s*=\s*["']http://"#).unwrap(),
@@ -224,37 +300,135 @@ impl InfraAnalyzer {
             .filter(|p| Self::pattern_matches_file(p, path))
             .collect();
 
-        if applicable.is_empty() {
-            return findings;
-        }
+        let lines: Vec<&str> = content.lines().collect();
 
-        for (line_num, line) in content.lines().enumerate() {
-            if Self::is_comment_line(line) {
-                continue;
-            }
-
-            // First matching pattern wins for this line
-            for pat in &applicable {
-                if !pat.regex.is_match(line) {
+        if !applicable.is_empty() {
+            for (line_num, &line) in lines.iter().enumerate() {
+                if Self::is_comment_line(line) {
                     continue;
                 }
 
-                // Apply negative filter: skip if line contains rejected substring
-                if let Some(reject) = pat.reject_if_contains {
-                    if line.contains(reject) {
+                // First matching pattern wins for this line
+                for pat in &applicable {
+                    if !pat.regex.is_match(line) {
                         continue;
                     }
-                }
 
+                    // Apply negative filter: skip if line contains rejected substring
+                    if let Some(reject) = pat.reject_if_contains {
+                        if line.contains(reject) {
+                            continue;
+                        }
+                    }
+
+                    findings.push(make_finding(
+                        pat.severity,
+                        format!("Infrastructure issue: {}", pat.name),
+                        path.to_path_buf(),
+                        line_num + 1,
+                        Some(pat.suggestion.to_string()),
+                        Some(pat.fix_kind.clone()),
+                    ));
+                    break;
+                }
+            }
+        }
+
+        // ── File-level: K8s missing probes and resource limits ────────────────
+        let is_k8s_yaml = matches!(
+            path.extension().and_then(|e| e.to_str()),
+            Some("yaml") | Some("yml")
+        );
+        if is_k8s_yaml {
+            let has_containers = lines.iter().any(|l| re_k8s_containers().is_match(l));
+            if has_containers {
+                if !lines.iter().any(|l| re_k8s_readiness().is_match(l)) {
+                    if let Some((ln, _)) = lines
+                        .iter()
+                        .enumerate()
+                        .find(|(_, l)| re_k8s_containers().is_match(l))
+                    {
+                        findings.push(make_finding(
+                            Severity::Warning,
+                            "Infrastructure issue: K8s Deployment missing readinessProbe (pod receives traffic before ready)".to_string(),
+                            path.to_path_buf(),
+                            ln + 1,
+                            Some("Add a readinessProbe to each container so the pod is only sent traffic when healthy".to_string()),
+                            Some(FixKind::Suggestion),
+                        ));
+                    }
+                }
+                if !lines.iter().any(|l| re_k8s_liveness().is_match(l)) {
+                    if let Some((ln, _)) = lines
+                        .iter()
+                        .enumerate()
+                        .find(|(_, l)| re_k8s_containers().is_match(l))
+                    {
+                        findings.push(make_finding(
+                            Severity::Warning,
+                            "Infrastructure issue: K8s Deployment missing livenessProbe (stuck pods won't be restarted)".to_string(),
+                            path.to_path_buf(),
+                            ln + 1,
+                            Some("Add a livenessProbe to each container so Kubernetes can restart unhealthy pods".to_string()),
+                            Some(FixKind::Suggestion),
+                        ));
+                    }
+                }
+                if !lines.iter().any(|l| re_k8s_resources().is_match(l)) {
+                    if let Some((ln, _)) = lines
+                        .iter()
+                        .enumerate()
+                        .find(|(_, l)| re_k8s_containers().is_match(l))
+                    {
+                        findings.push(make_finding(
+                            Severity::Warning,
+                            "Infrastructure issue: K8s Deployment missing resource limits/requests (noisy-neighbour risk)".to_string(),
+                            path.to_path_buf(),
+                            ln + 1,
+                            Some("Set resources.requests and resources.limits for CPU and memory on each container".to_string()),
+                            Some(FixKind::Suggestion),
+                        ));
+                    }
+                }
+            }
+        }
+
+        // ── File-level: Dockerfile missing USER instruction ───────────────────
+        let is_dockerfile = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| n == "Dockerfile" || n.starts_with("Dockerfile."))
+            .unwrap_or(false);
+        if is_dockerfile {
+            // FROM scratch is a special base with no shell; USER is not applicable
+            let all_scratch = lines
+                .iter()
+                .filter(|l| {
+                    let t = l.trim_start().to_lowercase();
+                    t.starts_with("from ")
+                })
+                .all(|l| l.trim_start().to_lowercase().contains("scratch"));
+
+            let has_user = lines.iter().any(|l| re_dockerfile_user().is_match(l));
+            let has_user_root = lines.iter().any(|l| re_dockerfile_user_root().is_match(l));
+            // Flag only when there is no USER at all, or only USER root (and not a scratch-only image)
+            if !all_scratch && (!has_user || has_user_root) {
+                // Report on the last FROM line (base image), or line 1
+                let from_line = lines
+                    .iter()
+                    .enumerate()
+                    .rfind(|(_, l)| l.trim_start().to_lowercase().starts_with("from "))
+                    .map(|(i, _)| i)
+                    .unwrap_or(0);
                 findings.push(make_finding(
-                    pat.severity,
-                    format!("Infrastructure issue: {}", pat.name),
+                    Severity::Warning,
+                    "Infrastructure issue: Dockerfile runs as root (no non-root USER instruction)"
+                        .to_string(),
                     path.to_path_buf(),
-                    line_num + 1,
-                    Some(pat.suggestion.to_string()),
-                    Some(pat.fix_kind.clone()),
+                    from_line + 1,
+                    Some("Add a non-root user: RUN useradd -m appuser && USER appuser".to_string()),
+                    Some(FixKind::Suggestion),
                 ));
-                break;
             }
         }
 
