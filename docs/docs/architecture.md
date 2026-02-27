@@ -10,7 +10,7 @@ Revet is a Cargo workspace with three crates:
 |-------|---------|
 | `crates/core` (`revet-core`) | All analysis logic: parsers, graph, analyzers, diff, config, cache |
 | `crates/cli` (`revet-cli`) | CLI commands and output formatters |
-| `crates/node-binding` | NAPI-RS Node.js bindings |
+| `crates/node-binding` (`revet-node`) | NAPI-RS Node.js bindings — functional basic API |
 
 ## Three-layer pipeline
 
@@ -88,6 +88,43 @@ struct CodeGraph {
 2. Register in `AnalyzerDispatcher::new()` in `analyzer/mod.rs`
 3. Add toggle field to `ModulesConfig` in `config.rs`
 4. Add tests in `crates/core/tests/test_<name>_analyzer.rs`
+
+## Node.js bindings (`crates/node-binding`)
+
+The `revet-node` crate exposes a minimal async JavaScript API via [NAPI-RS](https://napi.rs):
+
+```typescript
+import { analyzeRepository, getVersion } from 'revet';
+
+// Returns Promise<AnalyzeResult> — runs on a thread-pool task
+const result = await analyzeRepository('/path/to/repo');
+console.log(result.summary);   // { total, errors, warnings, info, filesScanned }
+result.findings.forEach(f => {
+  console.log(f.id, f.severity, f.file, f.line, f.message);
+});
+```
+
+**`AnalyzeResult`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `findings` | `JsFinding[]` | All findings from enabled domain analyzers |
+| `summary` | `AnalyzeSummary` | Counts by severity + files scanned |
+
+**`JsFinding`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | e.g. `"SEC-001"` |
+| `severity` | `"error" \| "warning" \| "info"` | |
+| `message` | `string` | Human-readable description |
+| `file` | `string` | Path relative to repo root |
+| `line` | `number` | 1-indexed line number |
+| `suggestion` | `string \| null` | Remediation hint |
+
+Config is loaded from `.revet.toml` in the repo root; defaults apply if absent.
+The scan runs all enabled domain analyzers in parallel using rayon.
+Graph-based analyzers and AI reasoning are not yet exposed via the Node API.
 
 ## Adding a language parser
 
