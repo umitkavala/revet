@@ -327,6 +327,198 @@ df = pd.read_csv("data/train.csv")
     );
 }
 
+// ── fit() inside a loop ────────────────────────────────────────
+
+#[test]
+fn test_fit_inside_for_loop() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "train.py",
+        "for epoch in range(100):\n    model.fit(X_train, y_train)\n",
+    );
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        "expected fit-in-loop finding; got: {findings:?}"
+    );
+    assert_eq!(findings[0].severity, Severity::Warning);
+    assert!(findings[0].message.contains("loop"));
+}
+
+#[test]
+fn test_fit_inside_while_loop() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "train.py",
+        "while not converged:\n    clf.fit(X, y)\n",
+    );
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        "expected fit-in-loop finding; got: {findings:?}"
+    );
+    assert_eq!(findings[0].severity, Severity::Warning);
+}
+
+#[test]
+fn test_fit_outside_loop_no_finding() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(&dir, "train.py", "model.fit(X_train, y_train)\n");
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.iter().all(|f| !f.message.contains("loop")),
+        "fit outside loop must not produce loop finding; got: {findings:?}"
+    );
+}
+
+// ── Missing model.eval() ────────────────────────────────────────
+
+#[test]
+fn test_no_grad_without_eval() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "infer.py",
+        "with torch.no_grad():\n    outputs = model(inputs)\n",
+    );
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        "expected missing eval() finding; got: {findings:?}"
+    );
+    assert_eq!(findings[0].severity, Severity::Warning);
+    assert!(findings[0].message.contains("eval"));
+}
+
+#[test]
+fn test_no_grad_with_eval_no_finding() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "infer.py",
+        "model.eval()\nwith torch.no_grad():\n    outputs = model(inputs)\n",
+    );
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.iter().all(|f| !f.message.contains("eval")),
+        "no_grad with eval() must not be flagged; got: {findings:?}"
+    );
+}
+
+// ── Missing random seed ─────────────────────────────────────────
+
+#[test]
+fn test_numpy_random_without_seed() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "experiment.py",
+        "X = np.random.randn(100, 10)\ny = np.random.randint(0, 2, 100)\n",
+    );
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        "expected missing seed finding; got: {findings:?}"
+    );
+    assert_eq!(findings[0].severity, Severity::Info);
+    assert!(findings[0].message.contains("seed"));
+}
+
+#[test]
+fn test_torch_random_without_seed() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(&dir, "model.py", "weights = torch.randn(64, 128)\n");
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        "expected missing seed finding; got: {findings:?}"
+    );
+    assert_eq!(findings[0].severity, Severity::Info);
+}
+
+#[test]
+fn test_numpy_random_with_seed_no_finding() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "experiment.py",
+        "np.random.seed(42)\nX = np.random.randn(100, 10)\n",
+    );
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.iter().all(|f| !f.message.contains("seed")),
+        "random with seed set must not be flagged; got: {findings:?}"
+    );
+}
+
+#[test]
+fn test_torch_manual_seed_no_finding() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "train.py",
+        "torch.manual_seed(0)\nweights = torch.randn(64, 128)\n",
+    );
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.iter().all(|f| !f.message.contains("seed")),
+        "torch with manual_seed must not be flagged; got: {findings:?}"
+    );
+}
+
+// ── Hardcoded write paths ───────────────────────────────────────
+
+#[test]
+fn test_to_csv_absolute_path() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "pipeline.py",
+        "df.to_csv(\"/data/results/output.csv\")\n",
+    );
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        "expected hardcoded write path; got: {findings:?}"
+    );
+    assert_eq!(findings[0].severity, Severity::Warning);
+}
+
+#[test]
+fn test_to_parquet_home_path() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "export.py",
+        "results.to_parquet(\"~/experiments/run1.parquet\")\n",
+    );
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(
+        findings.len(),
+        1,
+        "expected hardcoded write path; got: {findings:?}"
+    );
+}
+
+#[test]
+fn test_to_csv_relative_path_no_finding() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(&dir, "pipeline.py", "df.to_csv(\"output/results.csv\")\n");
+    let findings = MlPipelineAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.is_empty(),
+        "relative write path must not be flagged; got: {findings:?}"
+    );
+}
+
 // ── Infrastructure tests ───────────────────────────────────────
 
 #[test]

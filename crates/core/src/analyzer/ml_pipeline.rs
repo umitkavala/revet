@@ -11,6 +11,40 @@ use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+// ── Compiled regexes for context-aware / file-level checks ───────────────────
+
+fn re_loop_header() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^\s*(?:for|while)\s+.+:").unwrap())
+}
+
+fn re_fit_call() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\.fit\s*\(").unwrap())
+}
+
+fn re_torch_no_grad() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"torch\.no_grad\s*\(\s*\)").unwrap())
+}
+
+fn re_eval_call() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\.eval\s*\(\s*\)").unwrap())
+}
+
+fn re_random_usage() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?:np\.random\.\w+|torch\.rand(?:n|int)?)\s*\(").unwrap())
+}
+
+fn re_seed_call() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?:np\.random\.seed|torch\.manual_seed|random\.seed)\s*\(").unwrap()
+    })
+}
+
 /// A compiled ML pipeline detection pattern
 struct MlPattern {
     name: &'static str,
@@ -129,6 +163,19 @@ fn patterns() -> &'static [MlPattern] {
                     replace: "sklearn.model_selection".to_string(),
                 },
             },
+            // Pattern 9: Hardcoded absolute/home path in write call
+            MlPattern {
+                name: "hardcoded absolute path in data write call (non-reproducible)",
+                regex: Regex::new(
+                    r#"\.to_(?:csv|parquet|excel|feather)\s*\(\s*["'](?:/|~)"#,
+                )
+                .unwrap(),
+                severity: Severity::Warning,
+                reject_if_contains: None,
+                require_contains: None,
+                suggestion: "Use relative paths or environment variables for output file paths",
+                fix_kind: FixKind::Suggestion,
+            },
         ]
     })
 }
@@ -186,9 +233,11 @@ impl MlPipelineAnalyzer {
         };
 
         let all_patterns = patterns();
+        let lines: Vec<&str> = content.lines().collect();
         let mut findings = Vec::new();
 
-        for (line_num, line) in content.lines().enumerate() {
+        // ── Line-by-line patterns ──────────────────────────────────────────────
+        for (line_num, &line) in lines.iter().enumerate() {
             if Self::is_comment_line(line) {
                 continue;
             }
@@ -222,6 +271,74 @@ impl MlPipelineAnalyzer {
                     Some(pat.fix_kind.clone()),
                 ));
                 break;
+            }
+        }
+
+        // ── Context-aware: model.fit() inside a loop ──────────────────────────
+        // Look for a loop header followed by a .fit() call within the next 5 lines
+        for (i, &line) in lines.iter().enumerate() {
+            if Self::is_comment_line(line) {
+                continue;
+            }
+            if re_loop_header().is_match(line) {
+                let window_end = (i + 6).min(lines.len());
+                for (j, &inner) in lines[i + 1..window_end].iter().enumerate() {
+                    if Self::is_comment_line(inner) {
+                        continue;
+                    }
+                    if re_fit_call().is_match(inner) {
+                        findings.push(make_finding(
+                            Severity::Warning,
+                            "ML pipeline issue: model.fit() called inside a loop (repeated fitting anti-pattern)".to_string(),
+                            path.to_path_buf(),
+                            i + 1 + j + 1,
+                            Some("Move .fit() outside the loop; use partial_fit() for incremental learning or cross_val_score() for cross-validation".to_string()),
+                            Some(FixKind::Suggestion),
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ── File-level: torch.no_grad() without preceding model.eval() ────────
+        let has_no_grad = lines.iter().any(|l| re_torch_no_grad().is_match(l));
+        let has_eval = lines.iter().any(|l| re_eval_call().is_match(l));
+        if has_no_grad && !has_eval {
+            // Report on the first torch.no_grad() line
+            if let Some((line_num, _)) = lines
+                .iter()
+                .enumerate()
+                .find(|(_, l)| re_torch_no_grad().is_match(l))
+            {
+                findings.push(make_finding(
+                    Severity::Warning,
+                    "ML pipeline issue: torch.no_grad() used without model.eval() (model may behave differently in training vs inference mode)".to_string(),
+                    path.to_path_buf(),
+                    line_num + 1,
+                    Some("Call model.eval() before inference to disable dropout and batch normalisation training behaviour".to_string()),
+                    Some(FixKind::Suggestion),
+                ));
+            }
+        }
+
+        // ── File-level: random operations without seed ────────────────────────
+        let has_random_usage = lines.iter().any(|l| re_random_usage().is_match(l));
+        let has_seed = lines.iter().any(|l| re_seed_call().is_match(l));
+        if has_random_usage && !has_seed {
+            if let Some((line_num, _)) = lines
+                .iter()
+                .enumerate()
+                .find(|(_, l)| re_random_usage().is_match(l))
+            {
+                findings.push(make_finding(
+                    Severity::Info,
+                    "ML pipeline issue: random operations without seed (non-reproducible results)".to_string(),
+                    path.to_path_buf(),
+                    line_num + 1,
+                    Some("Set a random seed for reproducibility: np.random.seed(42) or torch.manual_seed(42)".to_string()),
+                    Some(FixKind::Suggestion),
+                ));
             }
         }
 
