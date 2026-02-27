@@ -30,7 +30,7 @@ toolchain     = false
 
 | Analyzer | Prefix | Default | What it catches |
 |----------|--------|---------|-----------------|
-| [Security](security) | `SEC-`, `SQL-` | on | Hardcoded secrets, SQL injection |
+| [Security](security) | `SEC-`, `SQL-`, `CMD-` | on | Hardcoded secrets, SQL injection, command injection |
 | [ML Pipeline](ml-pipeline) | `ML-` | on | Data leakage, pickle, hardcoded paths |
 | [Infrastructure](infrastructure) | `INFRA-` | off | Terraform, K8s, Docker misconfigs |
 | [React Hooks](react-hooks) | `HOOKS-` | off | Rules of Hooks violations |

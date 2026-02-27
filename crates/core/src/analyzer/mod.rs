@@ -6,6 +6,7 @@
 
 pub mod async_patterns;
 pub mod circular_imports;
+pub mod command_injection;
 pub mod complexity;
 pub mod custom_rules;
 pub mod dead_imports;
@@ -85,6 +86,7 @@ impl AnalyzerDispatcher {
             analyzers: vec![
                 Box::new(secret_exposure::SecretExposureAnalyzer::new()),
                 Box::new(sql_injection::SqlInjectionAnalyzer::new()),
+                Box::new(command_injection::CommandInjectionAnalyzer::new()),
                 Box::new(ml_pipeline::MlPipelineAnalyzer::new()),
                 Box::new(infra::InfraAnalyzer::new()),
                 Box::new(react_hooks::ReactHooksAnalyzer::new()),
