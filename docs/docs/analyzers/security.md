@@ -13,11 +13,20 @@ Detects hardcoded credentials and API keys in source files.
 | Finding | Severity | What it matches |
 |---------|----------|-----------------|
 | `SEC-001` | Error | AWS access key (`AKIA...`) |
-| `SEC-002` | Error | Private key PEM block |
-| `SEC-003` | Warning | GitHub token (`ghp_...`, `github_pat_...`) |
-| `SEC-004` | Warning | Generic API key assignment (`api_key = "..."`) |
-| `SEC-005` | Warning | Hardcoded password (`password = "..."`) |
-| `SEC-006` | Warning | Database connection string with credentials |
+| `SEC-002` | Error | AWS secret access key (context + 40-char value) |
+| `SEC-003` | Error | GitHub token (`ghp_...`, `gho_...`, `ghu_...`) |
+| `SEC-004` | Error | Private key PEM block |
+| `SEC-005` | Error | Database connection string with credentials |
+| `SEC-006` | Error | Stripe live secret / restricted key (`sk_live_...`, `rk_live_...`) |
+| `SEC-007` | Error | Slack token (`xoxb-...`, `xoxp-...`, `xoxa-...`, `xoxs-...`) |
+| `SEC-008` | Error | SendGrid API key (`SG....`) |
+| `SEC-009` | Error | Twilio auth token (context + 32-char hex value) |
+| `SEC-010` | Error | Azure Storage connection string |
+| `SEC-011` | Warning | Stripe live publishable key (`pk_live_...`) |
+| `SEC-012` | Warning | GCP service account email embedded in source |
+| `SEC-013` | Warning | Generic API key assignment (`api_key = "..."`) |
+| `SEC-014` | Warning | Generic secret key assignment (`secret_key = "..."`) |
+| `SEC-015` | Warning | Hardcoded password (`password = "..."`) |
 
 **Suppression:** Add `# revet-ignore SEC` on the offending line for test fixtures.
 

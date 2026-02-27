@@ -201,3 +201,155 @@ fn test_one_finding_per_line() {
     );
     assert!(findings[0].message.contains("AWS Access Key ID"));
 }
+
+// ── Stripe ────────────────────────────────────────────────────────
+
+#[test]
+fn test_detects_stripe_live_secret_key() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "billing.py",
+        "stripe.api_key = 'sk_live_4eC39HqLyjWDarjtT1zdp7dc'\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+    assert!(findings[0].message.contains("Stripe Secret"));
+}
+
+#[test]
+fn test_detects_stripe_live_restricted_key() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "billing.js",
+        "const key = 'rk_live_4eC39HqLyjWDarjtT1zdp7dc';\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+}
+
+#[test]
+fn test_detects_stripe_live_publishable_key() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "checkout.js",
+        "const pk = 'pk_live_4eC39HqLyjWDarjtT1zdp7dc';\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Warning);
+    assert!(findings[0].message.contains("Stripe Publishable Key"));
+}
+
+#[test]
+fn test_stripe_test_key_no_finding() {
+    let dir = TempDir::new().unwrap();
+    // Test keys are less sensitive — not flagged
+    let file = write_temp_file(
+        &dir,
+        "test_billing.py",
+        "stripe.api_key = 'sk_test_4eC39HqLyjWDarjtT1zdp7dc'\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.is_empty(),
+        "Test Stripe keys must not be flagged; got: {findings:?}"
+    );
+}
+
+// ── Slack ─────────────────────────────────────────────────────────
+
+#[test]
+fn test_detects_slack_bot_token() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "notify.py",
+        "SLACK_TOKEN = 'xoxb-1234567890-1234567890-abcdefghijklmnop'\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+    assert!(findings[0].message.contains("Slack Token"));
+}
+
+#[test]
+fn test_detects_slack_user_token() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "notify.py",
+        "token = 'xoxp-1234567890-1234567890-1234567890-abcdef'\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+}
+
+// ── SendGrid ──────────────────────────────────────────────────────
+
+#[test]
+fn test_detects_sendgrid_api_key() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "mailer.py",
+        "SENDGRID_KEY = 'SG.ABCDEFGHIJKLMNOPQRSTUV.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq'\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+    assert!(findings[0].message.contains("SendGrid"));
+}
+
+// ── Twilio ────────────────────────────────────────────────────────
+
+#[test]
+fn test_detects_twilio_auth_token() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "sms.py",
+        "twilio_auth_token = 'abcdef1234567890abcdef1234567890'\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+    assert!(findings[0].message.contains("Twilio"));
+}
+
+// ── Azure ─────────────────────────────────────────────────────────
+
+#[test]
+fn test_detects_azure_connection_string() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "storage.py",
+        "conn = 'DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=abc123/+xyz==;EndpointSuffix=core.windows.net'\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+    assert!(findings[0].message.contains("Azure"));
+}
+
+// ── GCP ───────────────────────────────────────────────────────────
+
+#[test]
+fn test_detects_gcp_service_account_email() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "gcp_key.json",
+        r#"{"client_email": "my-sa@my-project.iam.gserviceaccount.com"}"#,
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Warning);
+    assert!(findings[0].message.contains("GCP Service Account"));
+}

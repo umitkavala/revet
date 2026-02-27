@@ -62,6 +62,63 @@ fn patterns() -> &'static [SecretPattern] {
                 fix_kind: FixKind::CommentOut,
             },
             SecretPattern {
+                name: "Stripe Secret / Restricted Key (live)",
+                regex: Regex::new(r"(?:sk|rk)_live_[0-9a-zA-Z]{20,}").unwrap(),
+                severity: Severity::Error,
+                suggestion: "Store Stripe keys in environment variables; never commit live keys",
+                fix_kind: FixKind::CommentOut,
+            },
+            SecretPattern {
+                name: "Slack Token",
+                // xoxb- (bot), xoxp- (user), xoxa- (app), xoxs- (workspace)
+                regex: Regex::new(r"xox[bpas]-[A-Za-z0-9\-]{10,}").unwrap(),
+                severity: Severity::Error,
+                suggestion: "Store Slack tokens in environment variables or a secrets manager",
+                fix_kind: FixKind::CommentOut,
+            },
+            SecretPattern {
+                name: "SendGrid API Key",
+                regex: Regex::new(r"SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}").unwrap(),
+                severity: Severity::Error,
+                suggestion: "Store SendGrid API key in environment variable SENDGRID_API_KEY",
+                fix_kind: FixKind::CommentOut,
+            },
+            SecretPattern {
+                name: "Twilio Auth Token",
+                regex: Regex::new(r#"(?i)twilio.{0,30}['"][a-f0-9]{32}['"]"#).unwrap(),
+                severity: Severity::Error,
+                suggestion: "Store Twilio auth token in environment variable TWILIO_AUTH_TOKEN",
+                fix_kind: FixKind::CommentOut,
+            },
+            SecretPattern {
+                name: "Azure Storage Connection String",
+                regex: Regex::new(
+                    r"DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[^;]+;",
+                )
+                .unwrap(),
+                severity: Severity::Error,
+                suggestion:
+                    "Store Azure connection string in environment variable or Azure Key Vault",
+                fix_kind: FixKind::CommentOut,
+            },
+            SecretPattern {
+                name: "Stripe Publishable Key (live)",
+                regex: Regex::new(r"pk_live_[0-9a-zA-Z]{20,}").unwrap(),
+                severity: Severity::Warning,
+                suggestion: "Even publishable keys should be stored in config, not hardcoded",
+                fix_kind: FixKind::CommentOut,
+            },
+            SecretPattern {
+                name: "GCP Service Account Email",
+                // Presence of a service account email usually means a key JSON is embedded
+                regex: Regex::new(r#""client_email"\s*:\s*"[^"]+\.iam\.gserviceaccount\.com""#)
+                    .unwrap(),
+                severity: Severity::Warning,
+                suggestion: "Do not embed GCP service account key JSON in source code; \
+                             use Workload Identity or a secrets manager",
+                fix_kind: FixKind::CommentOut,
+            },
+            SecretPattern {
                 name: "Generic API Key",
                 regex: Regex::new(r#"(?i)api[_\-]?key\s*[:=]\s*['"][a-zA-Z0-9]{20,}['"]"#).unwrap(),
                 severity: Severity::Warning,
