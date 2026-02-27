@@ -91,20 +91,30 @@ struct CodeGraph {
 
 ## Node.js bindings (`crates/node-binding`)
 
-The `revet-node` crate exposes a minimal async JavaScript API via [NAPI-RS](https://napi.rs):
+The `revet-node` crate exposes an async JavaScript API via [NAPI-RS](https://napi.rs). All functions run on a thread-pool task and return a `Promise`.
 
 ```typescript
-import { analyzeRepository, getVersion } from 'revet';
+import { analyzeRepository, analyzeFiles, analyzeGraph, suppress, getVersion } from 'revet';
 
-// Returns Promise<AnalyzeResult> — runs on a thread-pool task
+// Full repository scan
 const result = await analyzeRepository('/path/to/repo');
 console.log(result.summary);   // { total, errors, warnings, info, filesScanned }
 result.findings.forEach(f => {
   console.log(f.id, f.severity, f.file, f.line, f.message);
 });
+
+// Targeted scan — only changed files (editor / incremental CI use-case)
+const partial = await analyzeFiles(['/path/to/repo/src/auth.py'], '/path/to/repo');
+
+// Code graph statistics
+const stats = await analyzeGraph('/path/to/repo');
+console.log(stats.nodeCount, stats.edgeCount);  // node/edge totals
+
+// Programmatically suppress a finding in .revet.toml
+const added = await suppress('SEC-001', '/path/to/repo');  // false if already present
 ```
 
-**`AnalyzeResult`**
+**`AnalyzeResult`** (returned by `analyzeRepository` and `analyzeFiles`)
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -122,9 +132,18 @@ result.findings.forEach(f => {
 | `line` | `number` | 1-indexed line number |
 | `suggestion` | `string \| null` | Remediation hint |
 
+**`GraphStats`** (returned by `analyzeGraph`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `nodeCount` | `number` | Total graph nodes (files, functions, classes, …) |
+| `edgeCount` | `number` | Total graph edges (calls, imports, contains, …) |
+| `filesScanned` | `number` | Source files parsed or loaded from cache |
+| `parseErrors` | `number` | Files that could not be parsed |
+
 Config is loaded from `.revet.toml` in the repo root; defaults apply if absent.
-The scan runs all enabled domain analyzers in parallel using rayon.
-Graph-based analyzers and AI reasoning are not yet exposed via the Node API.
+Domain analyzers run in parallel via rayon. The graph parser uses the on-disk cache (`.revet-cache/`) for incremental speed.
+AI reasoning is not yet exposed via the Node API.
 
 ## Adding a language parser
 
