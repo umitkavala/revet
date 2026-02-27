@@ -119,6 +119,20 @@ fn patterns() -> &'static [SecretPattern] {
                 fix_kind: FixKind::CommentOut,
             },
             SecretPattern {
+                name: "Base64-encoded secret in sensitive variable",
+                // Catches encoded credentials: variable name signals sensitivity,
+                // value contains 40+ base64 chars (including +//) — pattern not caught
+                // by existing alphanum-only patterns.
+                regex: Regex::new(
+                    r#"(?i)(?:password|passwd|secret|token|api[_-]?key|credential|private[_-]?key|auth[_-]?key)\s*[:=]\s*['"][A-Za-z0-9+/]{40,}={0,2}['"]\s*[;,\n]?"#,
+                )
+                .unwrap(),
+                severity: Severity::Warning,
+                suggestion: "Possible base64-encoded secret; store credentials in environment \
+                             variables or a secrets manager rather than encoding them in source",
+                fix_kind: FixKind::CommentOut,
+            },
+            SecretPattern {
                 name: "Generic API Key",
                 regex: Regex::new(r#"(?i)api[_\-]?key\s*[:=]\s*['"][a-zA-Z0-9]{20,}['"]"#).unwrap(),
                 severity: Severity::Warning,

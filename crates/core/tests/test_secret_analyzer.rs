@@ -353,3 +353,85 @@ fn test_detects_gcp_service_account_email() {
     assert_eq!(findings[0].severity, Severity::Warning);
     assert!(findings[0].message.contains("GCP Service Account"));
 }
+
+// ── Base64-encoded secrets ─────────────────────────────────────────
+
+#[test]
+fn test_detects_base64_password() {
+    let dir = TempDir::new().unwrap();
+    // base64("my_super_secret_password_value_here!") = bXlfc3VwZXJfc2VjcmV0X3Bhc3N3b3JkX3ZhbHVlX2hlcmUh
+    let file = write_temp_file(
+        &dir,
+        "config.py",
+        "password = 'bXlfc3VwZXJfc2VjcmV0X3Bhc3N3b3JkX3ZhbHVlX2hlcmUh'\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Warning);
+    assert!(findings[0].message.contains("Base64-encoded secret"));
+}
+
+#[test]
+fn test_detects_base64_token() {
+    let dir = TempDir::new().unwrap();
+    // 40+ base64 chars (eyJ... JWT-style header — 42 base64 chars before padding)
+    let file = write_temp_file(
+        &dir,
+        "auth.js",
+        "const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9abcde=';\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Warning);
+}
+
+#[test]
+fn test_detects_base64_api_key() {
+    let dir = TempDir::new().unwrap();
+    // api_key with base64 charset (contains / which existing alphanum-only pattern misses)
+    let file = write_temp_file(
+        &dir,
+        "client.py",
+        "api_key = 'c2VjcmV0QVBJS2V5Rm9yVGVzdGluZ1B1cnBvc2VzT25seQ=='\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Warning);
+}
+
+#[test]
+fn test_detects_base64_credential() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "config.yaml",
+        "credential: 'dGhpcyBpcyBhIGxvbmcgY3JlZGVudGlhbCBzdHJpbmc='\n",
+    );
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Warning);
+}
+
+#[test]
+fn test_base64_short_value_no_finding() {
+    let dir = TempDir::new().unwrap();
+    // < 40 chars — too short to flag
+    let file = write_temp_file(&dir, "config.py", "token = 'c2hvcnQ='\n");
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.is_empty(),
+        "Short base64 values must not be flagged; got: {findings:?}"
+    );
+}
+
+#[test]
+fn test_base64_env_lookup_no_finding() {
+    let dir = TempDir::new().unwrap();
+    // Reading from env — not a hardcoded secret
+    let file = write_temp_file(&dir, "config.py", "token = os.environ.get('AUTH_TOKEN')\n");
+    let findings = SecretExposureAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.is_empty(),
+        "Env lookup must not be flagged; got: {findings:?}"
+    );
+}

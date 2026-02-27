@@ -24,9 +24,10 @@ Detects hardcoded credentials and API keys in source files.
 | `SEC-010` | Error | Azure Storage connection string |
 | `SEC-011` | Warning | Stripe live publishable key (`pk_live_...`) |
 | `SEC-012` | Warning | GCP service account email embedded in source |
-| `SEC-013` | Warning | Generic API key assignment (`api_key = "..."`) |
-| `SEC-014` | Warning | Generic secret key assignment (`secret_key = "..."`) |
-| `SEC-015` | Warning | Hardcoded password (`password = "..."`) |
+| `SEC-013` | Warning | Base64-encoded secret in sensitive variable (40+ char value) |
+| `SEC-014` | Warning | Generic API key assignment (`api_key = "..."`) |
+| `SEC-015` | Warning | Generic secret key assignment (`secret_key = "..."`) |
+| `SEC-016` | Warning | Hardcoded password (`password = "..."`) |
 
 **Suppression:** Add `# revet-ignore SEC` on the offending line for test fixtures.
 
