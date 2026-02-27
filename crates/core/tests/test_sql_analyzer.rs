@@ -295,6 +295,154 @@ fn test_skips_comment_lines() {
     );
 }
 
+// ── Rust patterns ───────────────────────────────────────────────
+
+#[test]
+fn test_rust_format_macro_select() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "db.rs",
+        r#"let q = format!("SELECT * FROM users WHERE id = {}", id);"#,
+    );
+    let findings = SqlInjectionAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+    assert!(findings[0].message.contains("format!"));
+}
+
+#[test]
+fn test_rust_format_macro_delete() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "repo.rs",
+        r#"let sql = format!("DELETE FROM sessions WHERE token = '{token}'");"#,
+    );
+    let findings = SqlInjectionAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+}
+
+#[test]
+fn test_rust_format_not_flagged_in_py_file() {
+    // format!() in a .py file is not Rust — must not fire
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "script.py",
+        r#"x = format!("SELECT * FROM t WHERE id = {}")"#,
+    );
+    let findings = SqlInjectionAnalyzer::new().analyze_files(&[file], dir.path());
+    // The Rust-specific pattern is extension-gated; no other pattern matches
+    assert!(
+        findings.iter().all(|f| !f.message.contains("format!")),
+        "format! Rust pattern must not fire on .py file; got: {findings:?}"
+    );
+}
+
+// ── Go patterns ─────────────────────────────────────────────────
+
+#[test]
+fn test_go_fmt_sprintf_select() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "store.go",
+        r#"query := fmt.Sprintf("SELECT * FROM users WHERE name = '%s'", name)"#,
+    );
+    let findings = SqlInjectionAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+    assert!(findings[0].message.contains("fmt.Sprintf"));
+}
+
+#[test]
+fn test_go_fmt_sprintf_insert() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "repo.go",
+        r#"sql := fmt.Sprintf("INSERT INTO logs (msg) VALUES ('%s')", msg)"#,
+    );
+    let findings = SqlInjectionAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+}
+
+#[test]
+fn test_go_fmt_sprintf_not_flagged_in_rs_file() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "lib.rs",
+        r#"let s = fmt.Sprintf("SELECT * FROM t WHERE id = %d", id);"#,
+    );
+    let findings = SqlInjectionAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings.iter().all(|f| !f.message.contains("fmt.Sprintf")),
+        "Go pattern must not fire on .rs file; got: {findings:?}"
+    );
+}
+
+// ── Java patterns ────────────────────────────────────────────────
+
+#[test]
+fn test_java_string_format_select() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "UserDao.java",
+        r#"String q = String.format("SELECT * FROM users WHERE id = %d", userId);"#,
+    );
+    let findings = SqlInjectionAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+    assert!(findings[0].message.contains("String.format"));
+}
+
+#[test]
+fn test_java_string_concat_select() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "Repo.java",
+        r#"String sql = "SELECT * FROM accounts WHERE user = '" + username + "'";"#,
+    );
+    let findings = SqlInjectionAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, Severity::Error);
+    assert!(findings[0].message.contains("concatenation"));
+}
+
+#[test]
+fn test_java_string_concat_delete() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "AdminService.java",
+        r#"stmt.execute("DELETE FROM sessions WHERE id = " + sessionId);"#,
+    );
+    let findings = SqlInjectionAnalyzer::new().analyze_files(&[file], dir.path());
+    assert_eq!(findings.len(), 1);
+}
+
+#[test]
+fn test_java_patterns_not_flagged_in_go_file() {
+    let dir = TempDir::new().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "service.go",
+        r#"q := String.format("SELECT * FROM t WHERE id = %d", id)"#,
+    );
+    let findings = SqlInjectionAnalyzer::new().analyze_files(&[file], dir.path());
+    assert!(
+        findings
+            .iter()
+            .all(|f| !f.message.contains("String.format")),
+        "Java pattern must not fire on .go file; got: {findings:?}"
+    );
+}
+
 // ── Infrastructure tests ────────────────────────────────────────
 
 #[test]

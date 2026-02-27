@@ -17,6 +17,8 @@ struct SqlPattern {
     regex: Regex,
     severity: Severity,
     suggestion: &'static str,
+    /// If non-empty, only scan files with one of these extensions (without leading dot)
+    extensions: &'static [&'static str],
 }
 
 /// Returns all SQL injection patterns in priority order (Error patterns first)
@@ -39,6 +41,7 @@ fn patterns() -> &'static [SqlPattern] {
                     .unwrap(),
                 severity: Severity::Error,
                 suggestion: "Use parameterized queries: .objects.raw('SELECT ... WHERE id = %s', [id])",
+                extensions: &[],
             },
             // Pattern 2: f-string SQL in DB call — .execute(f"...SQL...")
             SqlPattern {
@@ -46,6 +49,7 @@ fn patterns() -> &'static [SqlPattern] {
                 regex: Regex::new(&format!(r#"\.{exec}\s*\(\s*f["'].*{kw}"#)).unwrap(),
                 severity: Severity::Error,
                 suggestion: "Use parameterized queries: .execute('SELECT ... WHERE id = ?', (id,))",
+                extensions: &[],
             },
             // Pattern 3: String concat SQL in DB call — .execute("...SQL..." + var)
             SqlPattern {
@@ -53,6 +57,7 @@ fn patterns() -> &'static [SqlPattern] {
                 regex: Regex::new(&format!(r#"\.{exec}\s*\(\s*["'].*{kw}.*["']\s*\+"#)).unwrap(),
                 severity: Severity::Error,
                 suggestion: "Use parameterized queries instead of string concatenation",
+                extensions: &[],
             },
             // Pattern 4: .format() SQL in DB call — .execute("...SQL...".format())
             SqlPattern {
@@ -63,6 +68,7 @@ fn patterns() -> &'static [SqlPattern] {
                 .unwrap(),
                 severity: Severity::Error,
                 suggestion: "Use parameterized queries instead of .format()",
+                extensions: &[],
             },
             // Pattern 5: % format SQL in DB call — .execute("...SQL..." % var)
             // Note: parameterized queries like execute("...%s", (var,)) won't match
@@ -73,6 +79,7 @@ fn patterns() -> &'static [SqlPattern] {
                     .unwrap(),
                 severity: Severity::Error,
                 suggestion: "Use parameterized queries instead of %-formatting",
+                extensions: &[],
             },
             // Pattern 6: Template literal SQL in DB call — .query(`...SQL...${var}`)
             SqlPattern {
@@ -81,43 +88,84 @@ fn patterns() -> &'static [SqlPattern] {
                     .unwrap(),
                 severity: Severity::Error,
                 suggestion: "Use parameterized queries instead of template literals",
+                extensions: &[],
+            },
+            // ── Error: Rust format! macro with SQL ───────────────────────
+            // Pattern 7: format!("...SQL...{}", var) or format!("...SQL...{var}")
+            SqlPattern {
+                name: "Rust format! macro building SQL string",
+                regex: Regex::new(&format!(r#"format!\s*\(\s*"[^"]*{kw}[^"]*\{{"#)).unwrap(),
+                severity: Severity::Error,
+                suggestion: "Use a parameterized query library (e.g. sqlx query! macro or prepared statements)",
+                extensions: &["rs"],
+            },
+            // ── Error: Go fmt.Sprintf with SQL ───────────────────────────
+            // Pattern 8: fmt.Sprintf("...SQL...", var) or fmt.Sprintf("...SQL...%s", var)
+            SqlPattern {
+                name: "Go fmt.Sprintf building SQL string",
+                regex: Regex::new(&format!(r#"fmt\.Sprintf\s*\(\s*"[^"]*{kw}[^"]*%"#)).unwrap(),
+                severity: Severity::Error,
+                suggestion: "Use db.Query/db.Exec with ? placeholders: db.Query(\"SELECT ... WHERE id = ?\", id)",
+                extensions: &["go"],
+            },
+            // ── Error: Java String.format / + concatenation with SQL ─────
+            // Pattern 9: String.format("...SQL...", var)
+            SqlPattern {
+                name: "Java String.format building SQL string",
+                regex: Regex::new(&format!(r#"String\.format\s*\(\s*"[^"]*{kw}"#)).unwrap(),
+                severity: Severity::Error,
+                suggestion: "Use PreparedStatement with ? placeholders instead of String.format()",
+                extensions: &["java"],
+            },
+            // Pattern 10: Java string + concatenation in SQL context — "SELECT..." + var
+            SqlPattern {
+                name: "Java string concatenation building SQL string",
+                regex: Regex::new(&format!(r#""[^"]*{kw}[^"]*"\s*\+\s*\w"#)).unwrap(),
+                severity: Severity::Error,
+                suggestion: "Use PreparedStatement with ? placeholders instead of string concatenation",
+                extensions: &["java"],
             },
             // ── Warning: standalone SQL strings with interpolation ──────
 
-            // Pattern 7: f-string SQL assignment — var = f"...SQL...{}"
+            // Pattern 11: f-string SQL assignment — var = f"...SQL...{}"
             SqlPattern {
                 name: "f-string SQL assignment",
                 regex: Regex::new(&format!(r#"=\s*f["'].*{kw}.*\{{"#)).unwrap(),
                 severity: Severity::Warning,
                 suggestion: "Use parameterized queries: pass variables as parameters, not in the query string",
+                extensions: &[],
             },
-            // Pattern 8: String concat SQL — "...SQL..." + var
+            // Pattern 12: String concat SQL — "...SQL..." + var
             SqlPattern {
                 name: "string concatenation SQL",
                 regex: Regex::new(&format!(r#"["'].*{kw}.*["']\s*\+\s*\w"#)).unwrap(),
                 severity: Severity::Warning,
                 suggestion: "Use parameterized queries instead of string concatenation",
+                extensions: &[],
             },
-            // Pattern 9: .format() SQL string — "...SQL...{}".format()
+            // Pattern 13: .format() SQL string — "...SQL...{}".format()
             SqlPattern {
                 name: ".format() SQL string",
                 regex: Regex::new(&format!(r#"["'].*{kw}.*["']\s*\.format\s*\("#)).unwrap(),
                 severity: Severity::Warning,
                 suggestion: "Use parameterized queries instead of .format()",
+                extensions: &[],
             },
-            // Pattern 10: % format SQL string — "...SQL...%s" % var
+            // Pattern 14: % format SQL string — "...SQL...%s" % var
             SqlPattern {
                 name: "%-format SQL string",
                 regex: Regex::new(&format!(r#"["'].*{kw}.*["']\s*%\s*\w"#)).unwrap(),
                 severity: Severity::Warning,
                 suggestion: "Use parameterized queries instead of %-formatting",
+                extensions: &[],
             },
-            // Pattern 11: Template literal SQL — var = `...SQL...${}`
+            // Pattern 15: Template literal SQL — var = `...SQL...${}`
             SqlPattern {
                 name: "template literal SQL",
                 regex: Regex::new(&format!(r#"`[^`]*{kw}[^`]*\$\{{[^`]*`"#)).unwrap(),
                 severity: Severity::Warning,
                 suggestion: "Use parameterized queries instead of template literals",
+                extensions: &[],
             },
         ]
     })
@@ -171,6 +219,12 @@ impl SqlInjectionAnalyzer {
             Err(_) => return Vec::new(),
         };
 
+        let file_ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
         let all_patterns = patterns();
         let mut findings = Vec::new();
 
@@ -182,6 +236,10 @@ impl SqlInjectionAnalyzer {
 
             // First matching pattern wins for this line
             for pat in all_patterns {
+                // Skip patterns that don't apply to this file's language
+                if !pat.extensions.is_empty() && !pat.extensions.contains(&file_ext.as_str()) {
+                    continue;
+                }
                 if pat.regex.is_match(line) {
                     findings.push(make_finding(
                         pat.severity,

@@ -33,13 +33,18 @@ Detects hardcoded credentials and API keys in source files.
 
 ## SQL Injection — `SQL-`
 
-Detects unsafe SQL construction via string concatenation or interpolation.
+Detects unsafe SQL construction via string interpolation or concatenation. Covers Python, JavaScript/TypeScript, Rust, Go, and Java.
 
 | Finding | Severity | What it matches |
 |---------|----------|-----------------|
-| `SQL-001` | Error | f-string or `.format()` inside `.execute()` |
+| `SQL-001` | Error | f-string or `.format()` inside `.execute()` (Python) |
 | `SQL-002` | Error | String concatenation (`+`) in SQL query |
-| `SQL-003` | Warning | Template literal in SQL (JS/TS) |
+| `SQL-003` | Error | `format!("...SQL...{}", var)` macro (Rust) |
+| `SQL-004` | Error | `fmt.Sprintf("...SQL...%s", var)` (Go) |
+| `SQL-005` | Error | `String.format("...SQL...", var)` (Java) |
+| `SQL-006` | Error | Java string `+` concatenation in SQL |
+| `SQL-007` | Warning | Template literal in SQL (JS/TS) |
+| `SQL-008` | Warning | Standalone f-string or `.format()` SQL assignment |
 
 **Fix:** Use parameterized queries or an ORM.
 
@@ -49,6 +54,32 @@ cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")
 
 # Good — safe
 cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+```
+
+```rust
+// Bad — flagged
+let q = format!("SELECT * FROM users WHERE id = {}", id);
+
+// Good — safe (sqlx)
+sqlx::query!("SELECT * FROM users WHERE id = ?", id)
+```
+
+```go
+// Bad — flagged
+query := fmt.Sprintf("SELECT * FROM users WHERE name = '%s'", name)
+
+// Good — safe
+rows, _ := db.Query("SELECT * FROM users WHERE name = ?", name)
+```
+
+```java
+// Bad — flagged
+String q = String.format("SELECT * FROM users WHERE id = %d", userId);
+String q2 = "SELECT * FROM users WHERE name = '" + username + "'";
+
+// Good — safe
+PreparedStatement ps = conn.prepareStatement("SELECT * FROM users WHERE id = ?");
+ps.setInt(1, userId);
 ```
 
 ## Command Injection — `CMD-`
