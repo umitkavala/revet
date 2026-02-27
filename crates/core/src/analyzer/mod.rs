@@ -12,6 +12,7 @@ pub mod custom_rules;
 pub mod dead_imports;
 pub mod dependency;
 pub mod error_handling;
+pub mod hardcoded_endpoints;
 pub mod infra;
 pub mod insecure_deserialization;
 pub mod ml_pipeline;
@@ -95,6 +96,7 @@ impl AnalyzerDispatcher {
                 Box::new(ssrf::SsrfAnalyzer::new()),
                 Box::new(path_traversal::PathTraversalAnalyzer::new()),
                 Box::new(sensitive_logging::SensitiveLoggingAnalyzer::new()),
+                Box::new(hardcoded_endpoints::HardcodedEndpointsAnalyzer::new()),
                 Box::new(ml_pipeline::MlPipelineAnalyzer::new()),
                 Box::new(infra::InfraAnalyzer::new()),
                 Box::new(react_hooks::ReactHooksAnalyzer::new()),

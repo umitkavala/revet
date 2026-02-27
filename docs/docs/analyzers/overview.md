@@ -24,6 +24,7 @@ complexity    = false
 dead_imports  = false
 dead_code     = false
 toolchain     = false
+hardcoded_endpoints = false
 ```
 
 ## Built-in analyzers
@@ -38,6 +39,7 @@ toolchain     = false
 | [Dependency](dependency) | `DEP-` | off | Wildcard imports, unpinned versions |
 | [Error Handling](error-handling) | `ERR-` | off | Empty catches, bare `except:` |
 | [Toolchain](toolchain) | `TOOL-` | off | CI tools not declared in manifests |
+| [Hardcoded Endpoints](hardcoded-endpoints) | `ENDPT-` | off | Hardcoded IPs and production/staging URLs |
 | [Custom Rules](custom-rules) | `CUSTOM-` | — | Your own regex rules |
 
 ## Graph analyzers

@@ -129,6 +129,10 @@ pub struct ModulesConfig {
     #[serde(default)]
     pub toolchain: bool,
 
+    /// Detect hardcoded IP addresses and production/staging URLs in source code
+    #[serde(default)]
+    pub hardcoded_endpoints: bool,
+
     /// Module-specific configurations
     #[serde(flatten)]
     pub module_configs: HashMap<String, toml::Value>,
@@ -281,6 +285,7 @@ impl Default for ModulesConfig {
             complexity: false,
             dead_imports: false,
             toolchain: false,
+            hardcoded_endpoints: false,
             module_configs: HashMap::new(),
         }
     }
