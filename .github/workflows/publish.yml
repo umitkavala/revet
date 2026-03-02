@@ -9,7 +9,9 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  publish:
+  # ── crates.io ──────────────────────────────────────────────────────────────
+
+  publish-crates:
     name: Publish to crates.io
     runs-on: ubuntu-latest
     steps:
@@ -39,3 +41,104 @@ jobs:
         run: cargo publish -p revet
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # ── npm — build native addon per platform ──────────────────────────────────
+
+  build-npm:
+    name: Build (${{ matrix.settings.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - label: linux-x64-gnu
+            host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+          - label: linux-arm64-gnu
+            host: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            setup: sudo apt-get install -y gcc-aarch64-linux-gnu
+
+          - label: darwin-x64
+            host: macos-latest
+            target: x86_64-apple-darwin
+
+          - label: darwin-arm64
+            host: macos-latest
+            target: aarch64-apple-darwin
+
+          - label: win32-x64-msvc
+            host: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.settings.target }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.settings.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.settings.target }}-cargo-
+
+      - name: Cross-compile setup
+        if: matrix.settings.setup
+        run: ${{ matrix.settings.setup }}
+
+      - name: Install napi-rs CLI
+        run: npm install -g @napi-rs/cli
+
+      - name: Build
+        run: napi build --platform --release --target ${{ matrix.settings.target }}
+        working-directory: crates/node-binding
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binding-${{ matrix.settings.label }}
+          path: crates/node-binding/*.node
+          if-no-files-found: error
+
+  # ── npm — publish ──────────────────────────────────────────────────────────
+
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: build-npm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: crates/node-binding/artifacts
+
+      - name: Install napi-rs CLI
+        run: npm install -g @napi-rs/cli
+
+      - name: Arrange artifacts
+        run: napi artifacts --dir artifacts --dist .
+        working-directory: crates/node-binding
+
+      - name: Publish
+        run: npm publish --access public
+        working-directory: crates/node-binding
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

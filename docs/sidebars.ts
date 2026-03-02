@@ -35,6 +35,7 @@ const sidebars: SidebarsConfig = {
     },
     'language-parsers',
     'output-formats',
+    'node-api',
     'ai-reasoning',
     'configuration',
     'ci-cd',

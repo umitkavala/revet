@@ -7,7 +7,7 @@
 //! # JavaScript API
 //!
 //! ```js
-//! const { analyzeRepository, analyzeFiles, analyzeGraph, suppress, getVersion } = require('./index');
+//! const { analyzeRepository, analyzeFiles, analyzeGraph, suppress, getVersion, watch } = require('./index');
 //!
 //! // Full repository scan
 //! const result = await analyzeRepository('/path/to/repo');
@@ -23,17 +23,40 @@
 //!
 //! // Suppress a finding in .revet.toml
 //! const added = await suppress('SEC-001', '/path/to/repo');
+//!
+//! // Watch for changes (EventEmitter-style)
+//! const { EventEmitter } = require('events');
+//! function watchRepo(repoPath, opts) {
+//!   const emitter = new EventEmitter();
+//!   const handle = watch(repoPath, (err, event) => {
+//!     if (err) { emitter.emit('error', err); return; }
+//!     emitter.emit(event.kind, event);
+//!   }, opts);
+//!   emitter.stop = () => handle.stop();
+//!   return emitter;
+//! }
+//! const watcher = watchRepo('/path/to/repo');
+//! watcher.on('finding', e => console.log(e.finding));
+//! watcher.on('done',    e => console.log('scan done', e.summary));
+//! watcher.on('error',   e => console.error(e));
+//! // later:
+//! watcher.stop();
 //! ```
 
 #![deny(clippy::all)]
 
 use napi::bindgen_prelude::*;
+use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 use revet_core::{
     analyzer::AnalyzerDispatcher, cache::FileGraphCache, config::RevetConfig,
     discovery::discover_files_extended, finding::Severity, parser::ParserDispatcher,
 };
 use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 // ── Shared output types ───────────────────────────────────────────────────────
 
@@ -421,4 +444,290 @@ pub fn suppress_finding(finding_id: String, repo_path: String) -> AsyncTask<Supp
 #[napi(js_name = "getVersion")]
 pub fn get_version() -> String {
     revet_core::VERSION.to_string()
+}
+
+// ── watch ────────────────────────────────────────────────────────────────────
+
+/// Options for `watch`.
+#[napi(object)]
+pub struct WatchOptions {
+    /// How long (in ms) to wait after the last change before re-running analysis.
+    /// Defaults to 300 ms.
+    pub debounce_ms: Option<u32>,
+}
+
+/// Scan progress emitted before each analysis pass.
+#[napi(object)]
+pub struct WatchProgress {
+    /// Number of files analysed so far in this pass.
+    pub files_done: u32,
+    /// Total files to analyse in this pass (0 = indeterminate).
+    pub files_total: u32,
+}
+
+/// Payload emitted to the watch callback on each event.
+///
+/// `kind` is one of `"finding"`, `"progress"`, `"done"`, or `"error"`.
+/// The corresponding field is populated; the others are `null`.
+#[napi(object)]
+pub struct WatchEvent {
+    /// Event type: `"finding"` | `"progress"` | `"done"` | `"error"`.
+    pub kind: String,
+    /// Populated when `kind == "finding"`.
+    pub finding: Option<JsFinding>,
+    /// Populated when `kind == "progress"`.
+    pub progress: Option<WatchProgress>,
+    /// Populated when `kind == "done"`.
+    pub summary: Option<AnalyzeSummary>,
+    /// Populated when `kind == "error"`.
+    pub error: Option<String>,
+}
+
+/// Opaque handle returned by `watch`. Call `stop()` to shut down the watcher.
+#[napi]
+pub struct WatchHandle {
+    running: Arc<AtomicBool>,
+}
+
+#[napi]
+impl WatchHandle {
+    /// Stop the file watcher. Returns `true` if it was still running, `false`
+    /// if it had already been stopped.
+    #[napi]
+    pub fn stop(&self) -> bool {
+        self.running.swap(false, Ordering::SeqCst)
+    }
+
+    /// Whether the watcher thread is still active.
+    #[napi(getter)]
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::SeqCst)
+    }
+}
+
+/// Emit a `progress` event signalling that a new scan pass is starting.
+fn emit_progress(tsfn: &ThreadsafeFunction<WatchEvent>, files_total: u32) {
+    tsfn.call(
+        Ok(WatchEvent {
+            kind: "progress".to_string(),
+            finding: None,
+            progress: Some(WatchProgress {
+                files_done: 0,
+                files_total,
+            }),
+            summary: None,
+            error: None,
+        }),
+        ThreadsafeFunctionCallMode::NonBlocking,
+    );
+}
+
+/// Emit findings + summary from an analysis result via the TSFN.
+fn emit_result(tsfn: &ThreadsafeFunction<WatchEvent>, result: napi::Result<AnalyzeResult>) {
+    let mode = ThreadsafeFunctionCallMode::NonBlocking;
+    match result {
+        Ok(ar) => {
+            let summary = ar.summary;
+            for finding in ar.findings {
+                tsfn.call(
+                    Ok(WatchEvent {
+                        kind: "finding".to_string(),
+                        finding: Some(finding),
+                        progress: None,
+                        summary: None,
+                        error: None,
+                    }),
+                    mode,
+                );
+            }
+            tsfn.call(
+                Ok(WatchEvent {
+                    kind: "done".to_string(),
+                    finding: None,
+                    progress: None,
+                    summary: Some(summary),
+                    error: None,
+                }),
+                mode,
+            );
+        }
+        Err(e) => {
+            tsfn.call(
+                Ok(WatchEvent {
+                    kind: "error".to_string(),
+                    finding: None,
+                    progress: None,
+                    summary: None,
+                    error: Some(e.reason),
+                }),
+                mode,
+            );
+        }
+    }
+}
+
+/// Watch a repository for file changes and stream findings as they occur.
+///
+/// Performs an initial full scan immediately, then re-scans changed files
+/// whenever the filesystem reports modifications. The callback is invoked
+/// for each event:
+///
+/// - `{ kind: "finding", finding: JsFinding }` — one per detected finding
+/// - `{ kind: "done",    summary: AnalyzeSummary }` — end of each scan pass
+/// - `{ kind: "error",  error: string }` — watcher or analysis error
+///
+/// Returns a `WatchHandle` whose `stop()` method shuts down the watcher.
+///
+/// @param repoPath - Repository root to watch.
+/// @param callback - Called with `(err, event)` for each event.
+/// @param options  - Optional tuning (debounce interval).
+///
+/// @example
+/// ```js
+/// const { EventEmitter } = require('events');
+/// function watchRepo(repoPath, opts) {
+///   const emitter = new EventEmitter();
+///   const handle = watch(repoPath, (err, event) => {
+///     if (err) { emitter.emit('error', err); return; }
+///     emitter.emit(event.kind, event);
+///   }, opts);
+///   emitter.stop = () => handle.stop();
+///   return emitter;
+/// }
+/// ```
+#[napi(js_name = "watch")]
+pub fn watch_repository(
+    repo_path: String,
+    callback: ThreadsafeFunction<WatchEvent>,
+    options: Option<WatchOptions>,
+) -> WatchHandle {
+    let debounce_ms = options.and_then(|o| o.debounce_ms).unwrap_or(300) as u64;
+
+    let running = Arc::new(AtomicBool::new(true));
+    let running_clone = running.clone();
+
+    std::thread::spawn(move || {
+        use notify::{RecursiveMode, Watcher};
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        // ── resolve path ──────────────────────────────────────────────────
+        let repo_path_buf = match std::fs::canonicalize(&repo_path) {
+            Ok(p) => p,
+            Err(e) => {
+                callback.call(
+                    Ok(WatchEvent {
+                        kind: "error".to_string(),
+                        finding: None,
+                        progress: None,
+                        summary: None,
+                        error: Some(format!("Cannot resolve path '{}': {}", repo_path, e)),
+                    }),
+                    ThreadsafeFunctionCallMode::Blocking,
+                );
+                return;
+            }
+        };
+
+        // ── initial scan ──────────────────────────────────────────────────
+        // filesTotal=0 signals indeterminate progress (file count unknown
+        // without a separate discovery pass).
+        emit_progress(&callback, 0);
+        emit_result(
+            &callback,
+            run_full_analysis(&repo_path_buf.to_string_lossy()),
+        );
+
+        if !running_clone.load(Ordering::SeqCst) {
+            return;
+        }
+
+        // ── set up file watcher ───────────────────────────────────────────
+        let (tx, rx) = mpsc::channel::<notify::Result<notify::Event>>();
+        let mut watcher = match notify::recommended_watcher(tx) {
+            Ok(w) => w,
+            Err(e) => {
+                callback.call(
+                    Ok(WatchEvent {
+                        kind: "error".to_string(),
+                        finding: None,
+                        progress: None,
+                        summary: None,
+                        error: Some(format!("Watcher init failed: {}", e)),
+                    }),
+                    ThreadsafeFunctionCallMode::Blocking,
+                );
+                return;
+            }
+        };
+
+        if let Err(e) = watcher.watch(&repo_path_buf, RecursiveMode::Recursive) {
+            callback.call(
+                Ok(WatchEvent {
+                    kind: "error".to_string(),
+                    finding: None,
+                    progress: None,
+                    summary: None,
+                    error: Some(format!("Cannot watch path: {}", e)),
+                }),
+                ThreadsafeFunctionCallMode::Blocking,
+            );
+            return;
+        }
+
+        // ── event loop with manual debounce ───────────────────────────────
+        let debounce = Duration::from_millis(debounce_ms);
+        let mut pending: Vec<PathBuf> = Vec::new();
+
+        loop {
+            if !running_clone.load(Ordering::SeqCst) {
+                break;
+            }
+
+            match rx.recv_timeout(debounce) {
+                Ok(Ok(event)) => {
+                    // Collect changed source files; ignore directories and
+                    // the .revet-cache/ dir to avoid feedback loops.
+                    for path in event.paths {
+                        if path.is_file()
+                            && !path.components().any(|c| c.as_os_str() == ".revet-cache")
+                            && !pending.contains(&path)
+                        {
+                            pending.push(path);
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    // Notify internal error — report but keep running
+                    callback.call(
+                        Ok(WatchEvent {
+                            kind: "error".to_string(),
+                            finding: None,
+                            progress: None,
+                            summary: None,
+                            error: Some(format!("Watch event error: {}", e)),
+                        }),
+                        ThreadsafeFunctionCallMode::NonBlocking,
+                    );
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    // Debounce window elapsed — process accumulated changes
+                    if !pending.is_empty() {
+                        let files: Vec<String> = pending
+                            .drain(..)
+                            .map(|p| p.to_string_lossy().to_string())
+                            .collect();
+                        emit_progress(&callback, files.len() as u32);
+                        emit_result(
+                            &callback,
+                            run_files_analysis(&files, &repo_path_buf.to_string_lossy()),
+                        );
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+    });
+
+    WatchHandle { running }
 }

@@ -12,10 +12,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 revet-core = { path = "../core" }
-napi = { version = "2", features = ["async"] }
+napi = { version = "2", features = ["async", "napi4"] }
 napi-derive = "2"
 serde_json.workspace = true
 toml.workspace = true
+notify.workspace = true
 
 [build-dependencies]
 napi-build = "2"

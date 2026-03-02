@@ -91,59 +91,11 @@ struct CodeGraph {
 
 ## Node.js bindings (`crates/node-binding`)
 
-The `revet-node` crate exposes an async JavaScript API via [NAPI-RS](https://napi.rs). All functions run on a thread-pool task and return a `Promise`.
+The `revet-node` crate exposes an async JavaScript / TypeScript API via [NAPI-RS](https://napi.rs). Published as `@revet/core`.
 
-```typescript
-import { analyzeRepository, analyzeFiles, analyzeGraph, suppress, getVersion } from 'revet';
+Functions: `analyzeRepository`, `analyzeFiles`, `analyzeGraph`, `suppress`, `getVersion`, `watchRepo`.
 
-// Full repository scan
-const result = await analyzeRepository('/path/to/repo');
-console.log(result.summary);   // { total, errors, warnings, info, filesScanned }
-result.findings.forEach(f => {
-  console.log(f.id, f.severity, f.file, f.line, f.message);
-});
-
-// Targeted scan — only changed files (editor / incremental CI use-case)
-const partial = await analyzeFiles(['/path/to/repo/src/auth.py'], '/path/to/repo');
-
-// Code graph statistics
-const stats = await analyzeGraph('/path/to/repo');
-console.log(stats.nodeCount, stats.edgeCount);  // node/edge totals
-
-// Programmatically suppress a finding in .revet.toml
-const added = await suppress('SEC-001', '/path/to/repo');  // false if already present
-```
-
-**`AnalyzeResult`** (returned by `analyzeRepository` and `analyzeFiles`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `findings` | `JsFinding[]` | All findings from enabled domain analyzers |
-| `summary` | `AnalyzeSummary` | Counts by severity + files scanned |
-
-**`JsFinding`**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `string` | e.g. `"SEC-001"` |
-| `severity` | `"error" \| "warning" \| "info"` | |
-| `message` | `string` | Human-readable description |
-| `file` | `string` | Path relative to repo root |
-| `line` | `number` | 1-indexed line number |
-| `suggestion` | `string \| null` | Remediation hint |
-
-**`GraphStats`** (returned by `analyzeGraph`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `nodeCount` | `number` | Total graph nodes (files, functions, classes, …) |
-| `edgeCount` | `number` | Total graph edges (calls, imports, contains, …) |
-| `filesScanned` | `number` | Source files parsed or loaded from cache |
-| `parseErrors` | `number` | Files that could not be parsed |
-
-Config is loaded from `.revet.toml` in the repo root; defaults apply if absent.
-Domain analyzers run in parallel via rayon. The graph parser uses the on-disk cache (`.revet-cache/`) for incremental speed.
-AI reasoning is not yet exposed via the Node API.
+See the **[Node.js API reference](./node-api)** for full documentation including the streaming watch API.
 
 ## Adding a language parser
 
