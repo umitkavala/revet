@@ -12,19 +12,22 @@ All analyzers are toggled in `.revet.toml`:
 
 ```toml
 [modules]
-security      = true    # default on
-ml            = true    # default on
-cycles        = true    # default on
-infra         = false
-react         = false
-async_patterns = false
-dependency    = false
-error_handling = false
-complexity    = false
-dead_imports  = false
-dead_code     = false
-toolchain     = false
+security            = true    # default on
+ml                  = true    # default on
+cycles              = true    # default on
+infra               = false
+react               = false
+async_patterns      = false
+dependency          = false
+error_handling      = false
+complexity          = false
+complexity_threshold = 10     # warn above N, error above 2×N
+dead_imports        = false
+dead_code           = false
+toolchain           = false
 hardcoded_endpoints = false
+magic_numbers       = false
+test_coverage       = false
 ```
 
 ## Built-in analyzers
@@ -40,6 +43,7 @@ hardcoded_endpoints = false
 | [Error Handling](error-handling) | `ERR-` | off | Empty catches, bare `except:` |
 | [Toolchain](toolchain) | `TOOL-` | off | CI tools not declared in manifests |
 | [Hardcoded Endpoints](hardcoded-endpoints) | `ENDPT-` | off | Hardcoded IPs and production/staging URLs |
+| Magic Numbers | `MAGIC-` | off | Unnamed numeric literals that should be named constants |
 | [Custom Rules](custom-rules) | `CUSTOM-` | — | Your own regex rules |
 
 ## Graph analyzers
@@ -49,9 +53,10 @@ Graph analyzers query the code dependency graph and run after file parsing:
 | Analyzer | Prefix | Default | What it catches |
 |----------|--------|---------|-----------------|
 | Circular Imports | `CYCLE-` | on | Import cycles between files |
-| Complexity | `CMPLX-` | off | Overly complex functions |
+| Complexity | `CMPLX-` | off | Overly long/complex functions (length, params, cyclomatic, nesting) |
 | Dead Imports | `DIMPORT-` | off | Imports never used within the file |
 | Unused Exports | `DEAD-` | off | Exported symbols never imported elsewhere |
+| Test Coverage Gaps | `COV-` | off | Public functions/classes with no mention in any test file |
 
 ## Suppression
 

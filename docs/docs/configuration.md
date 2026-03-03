@@ -20,15 +20,19 @@ ml              = true   # ML pipeline anti-patterns
 cycles          = true   # circular import detection
 
 # Off by default — opt in as needed
-infra           = false  # Terraform, Kubernetes, Docker
-react           = false  # React hooks rules
-async_patterns  = false  # async/await anti-patterns
-dependency      = false  # import hygiene + unpinned versions
-error_handling  = false  # empty catches, .unwrap(), bare except
-complexity      = false  # overly complex functions
-dead_imports    = false  # imports never used in the same file
-dead_code       = false  # exported symbols never imported elsewhere
-toolchain       = false  # CI tools not declared in manifests
+infra                = false  # Terraform, Kubernetes, Docker
+react                = false  # React hooks rules
+async_patterns       = false  # async/await anti-patterns
+dependency           = false  # import hygiene + unpinned versions
+error_handling       = false  # empty catches, .unwrap(), bare except
+complexity           = false  # overly complex functions
+complexity_threshold = 10     # cyclomatic complexity warn threshold (error at 2×)
+dead_imports         = false  # imports never used in the same file
+dead_code            = false  # exported symbols never imported elsewhere
+toolchain            = false  # CI tools not declared in manifests
+hardcoded_endpoints  = false  # hardcoded IPs and production/staging URLs
+magic_numbers        = false  # unnamed numeric literals (magic numbers)
+test_coverage        = false  # public symbols with no test file mention
 
 [ignore]
 paths    = ["vendor/", "node_modules/", "dist/", "target/"]
