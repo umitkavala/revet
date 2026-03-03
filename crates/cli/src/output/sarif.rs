@@ -170,6 +170,7 @@ pub fn build_sarif_log(findings: &[Finding], repo_path: &Path) -> SarifLog {
 
     let results: Vec<SarifResult> = findings
         .iter()
+        .filter(|f| !f.file.as_os_str().is_empty())
         .map(|f| {
             let prefix = extract_prefix(&f.id);
             let rule_index = prefix_index.get(prefix).copied().unwrap_or(0);
@@ -181,21 +182,17 @@ pub fn build_sarif_log(findings: &[Finding], repo_path: &Path) -> SarifLog {
                 message: SarifMessage {
                     text: f.message.clone(),
                 },
-                locations: if f.file.as_os_str().is_empty() {
-                    vec![]
-                } else {
-                    vec![SarifLocation {
-                        physical_location: SarifPhysicalLocation {
-                            artifact_location: SarifArtifactLocation {
-                                uri: relative_uri(&f.file, repo_path),
-                                uri_base_id: "%SRCROOT%".to_string(),
-                            },
-                            region: SarifRegion {
-                                start_line: f.line.max(1),
-                            },
+                locations: vec![SarifLocation {
+                    physical_location: SarifPhysicalLocation {
+                        artifact_location: SarifArtifactLocation {
+                            uri: relative_uri(&f.file, repo_path),
+                            uri_base_id: "%SRCROOT%".to_string(),
                         },
-                    }]
-                },
+                        region: SarifRegion {
+                            start_line: f.line.max(1),
+                        },
+                    },
+                }],
             }
         })
         .collect();
