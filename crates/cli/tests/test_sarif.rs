@@ -161,6 +161,32 @@ fn test_roundtrip_serialization() {
 }
 
 #[test]
+fn test_empty_file_path_produces_no_location() {
+    // Findings with no associated file (e.g. repo-level graph findings) must
+    // not emit an empty artifactLocation.uri, which is invalid SARIF and
+    // causes "locationFromSarifResult: expected artifact location" in consumers.
+    let findings = vec![Finding {
+        id: "IMPACT-001".to_string(),
+        severity: Severity::Warning,
+        message: "repo-level finding".to_string(),
+        file: PathBuf::new(), // empty — no file associated
+        line: 0,
+        affected_dependents: 3,
+        ..Default::default()
+    }];
+    let log = build_sarif_log(&findings, Path::new("/repo"));
+
+    let result = &log.runs[0].results[0];
+    assert!(
+        result.locations.is_empty(),
+        "empty file path must produce zero locations, not an empty URI"
+    );
+    // Rule and message should still be present
+    assert_eq!(result.rule_id, "IMPACT");
+    assert_eq!(result.message.text, "repo-level finding");
+}
+
+#[test]
 fn test_unknown_prefix() {
     let findings = vec![make_finding(
         "CUSTOM-001",
