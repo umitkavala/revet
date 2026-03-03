@@ -1,6 +1,6 @@
 {
   "name": "@revet/core",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Node.js bindings for Revet — fast, deterministic code analysis",
   "main": "index.js",
   "types": "index.d.ts",
@@ -33,11 +33,11 @@
     "build:debug": "napi build --platform"
   },
   "optionalDependencies": {
-    "@revet/core-linux-x64-gnu": "0.2.2",
-    "@revet/core-linux-arm64-gnu": "0.2.2",
-    "@revet/core-darwin-x64": "0.2.2",
-    "@revet/core-darwin-arm64": "0.2.2",
-    "@revet/core-win32-x64-msvc": "0.2.2"
+    "@revet/core-linux-x64-gnu": "0.2.3",
+    "@revet/core-linux-arm64-gnu": "0.2.3",
+    "@revet/core-darwin-x64": "0.2.3",
+    "@revet/core-darwin-arm64": "0.2.3",
+    "@revet/core-win32-x64-msvc": "0.2.3"
   },
   "devDependencies": {
     "@napi-rs/cli": "^2"
