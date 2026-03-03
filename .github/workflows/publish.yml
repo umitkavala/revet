@@ -137,8 +137,18 @@ jobs:
         run: napi artifacts --output-dir artifacts --npm-dir .
         working-directory: crates/node-binding
 
-      - name: Publish
-        run: npm publish --access public
+      - name: Publish platform packages
+        run: |
+          for dir in linux-x64-gnu linux-arm64-gnu darwin-x64 darwin-arm64 win32-x64-msvc; do
+            cd $dir && npm publish --access public || echo "Already published $dir, skipping"
+            cd ..
+          done
+        working-directory: crates/node-binding
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish main package
+        run: npm publish --access public || echo "Already published, skipping"
         working-directory: crates/node-binding
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

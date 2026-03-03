@@ -1,0 +1,17 @@
+{
+  "name": "@revet/core-win32-x64-msvc",
+  "version": "0.2.2",
+  "description": "Node.js bindings for Revet — win32-x64-msvc",
+  "main": "revet.win32-x64-msvc.node",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/umitkavala/revet"
+  },
+  "files": [
+    "revet.win32-x64-msvc.node"
+  ],
+  "engines": {
+    "node": ">= 14"
+  }
+}

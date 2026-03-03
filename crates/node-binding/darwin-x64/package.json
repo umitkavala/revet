@@ -1,0 +1,17 @@
+{
+  "name": "@revet/core-darwin-x64",
+  "version": "0.2.2",
+  "description": "Node.js bindings for Revet — darwin-x64",
+  "main": "revet.darwin-x64.node",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/umitkavala/revet"
+  },
+  "files": [
+    "revet.darwin-x64.node"
+  ],
+  "engines": {
+    "node": ">= 14"
+  }
+}

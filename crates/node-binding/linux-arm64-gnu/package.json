@@ -1,0 +1,17 @@
+{
+  "name": "@revet/core-linux-arm64-gnu",
+  "version": "0.2.2",
+  "description": "Node.js bindings for Revet — linux-arm64-gnu",
+  "main": "revet.linux-arm64-gnu.node",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/umitkavala/revet"
+  },
+  "files": [
+    "revet.linux-arm64-gnu.node"
+  ],
+  "engines": {
+    "node": ">= 14"
+  }
+}
