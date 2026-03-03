@@ -15,6 +15,7 @@ pub mod error_handling;
 pub mod hardcoded_endpoints;
 pub mod infra;
 pub mod insecure_deserialization;
+pub mod magic_numbers;
 pub mod ml_pipeline;
 pub mod path_traversal;
 pub mod react_hooks;
@@ -97,6 +98,7 @@ impl AnalyzerDispatcher {
                 Box::new(path_traversal::PathTraversalAnalyzer::new()),
                 Box::new(sensitive_logging::SensitiveLoggingAnalyzer::new()),
                 Box::new(hardcoded_endpoints::HardcodedEndpointsAnalyzer::new()),
+                Box::new(magic_numbers::MagicNumbersAnalyzer::new()),
                 Box::new(ml_pipeline::MlPipelineAnalyzer::new()),
                 Box::new(infra::InfraAnalyzer::new()),
                 Box::new(react_hooks::ReactHooksAnalyzer::new()),

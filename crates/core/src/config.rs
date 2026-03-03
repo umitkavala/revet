@@ -133,6 +133,10 @@ pub struct ModulesConfig {
     #[serde(default)]
     pub hardcoded_endpoints: bool,
 
+    /// Detect unnamed numeric literals (magic numbers) that should be named constants
+    #[serde(default)]
+    pub magic_numbers: bool,
+
     /// Module-specific configurations
     #[serde(flatten)]
     pub module_configs: HashMap<String, toml::Value>,
@@ -286,6 +290,7 @@ impl Default for ModulesConfig {
             dead_imports: false,
             toolchain: false,
             hardcoded_endpoints: false,
+            magic_numbers: false,
             module_configs: HashMap::new(),
         }
     }
