@@ -10,10 +10,8 @@ use revet_core::{
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use super::review::{
-    build_summary, has_extension, has_filename, print_github, print_json, print_no_files,
-    print_sarif, print_terminal, resolve_format, Format, ReviewExitCode,
-};
+use super::review::{build_summary, has_extension, has_filename, ReviewExitCode};
+use crate::output::{make_formatter, resolve_format};
 
 pub fn run(base: &str, cli: &crate::Cli) -> Result<ReviewExitCode> {
     let start = Instant::now();
@@ -74,7 +72,9 @@ pub fn run(base: &str, cli: &crate::Cli) -> Result<ReviewExitCode> {
     eprintln!("{} ({} files)", "done".green(), files.len());
 
     if files.is_empty() {
-        print_no_files(format, start);
+        let mut out = make_formatter(format, &repo_path, false);
+        out.write_no_files(start.elapsed());
+        out.finalize();
         return Ok(ReviewExitCode::Success);
     }
 
@@ -177,31 +177,27 @@ pub fn run(base: &str, cli: &crate::Cli) -> Result<ReviewExitCode> {
     // ── 10. Output ───────────────────────────────────────────────
     let summary = build_summary(&findings, files.len(), node_count);
 
-    match format {
-        Format::Json => print_json(&findings, &summary),
-        Format::Sarif => print_sarif(&findings, &repo_path),
-        Format::Github => print_github(&findings, &repo_path),
-        Format::Terminal => {
-            print_terminal(
-                &findings,
-                &summary,
-                &repo_path,
-                start,
-                &all_suppressed,
-                cli.show_suppressed,
-                None,
-            );
-            if diff_filtered > 0 {
-                println!(
-                    "  {}",
-                    format!(
-                        "{} finding(s) on unchanged lines filtered out",
-                        diff_filtered
-                    )
-                    .dimmed()
-                );
-            }
+    let mut out = make_formatter(format, &repo_path, cli.show_suppressed);
+    for f in &findings {
+        out.write_finding(f, &repo_path);
+    }
+    if cli.show_suppressed {
+        for sf in &all_suppressed {
+            out.write_suppressed(sf, &repo_path);
         }
+    }
+    out.write_summary(&summary, &all_suppressed, start.elapsed(), None);
+    out.finalize();
+
+    if diff_filtered > 0 {
+        println!(
+            "  {}",
+            format!(
+                "{} finding(s) on unchanged lines filtered out",
+                diff_filtered
+            )
+            .dimmed()
+        );
     }
 
     let fail_on = cli.fail_on.as_deref().unwrap_or(&config.general.fail_on);

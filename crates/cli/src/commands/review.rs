@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
 use crate::ai::AiReasoner;
-use crate::output;
 use crate::output::github_comment;
+use crate::output::{make_formatter, resolve_format};
 use crate::progress::Step;
 use crate::run_log;
 
@@ -60,7 +60,9 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     let files = discover_review_files(&repo_path, cli, &config, &all_extensions, &extra_names)?;
 
     if files.is_empty() {
-        print_no_files(format, start);
+        let mut out = make_formatter(format, &repo_path, false);
+        out.write_no_files(start.elapsed());
+        out.finalize();
         return Ok(ReviewExitCode::Success);
     }
 
@@ -110,8 +112,14 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
             let total_deps = change.direct_dependents.len() + change.transitive_dependents.len();
 
+            let id_prefix = match change.classification {
+                revet_core::ChangeClassification::Breaking => "BREAKING",
+                revet_core::ChangeClassification::PotentiallyBreaking => "IMPACT",
+                revet_core::ChangeClassification::Safe => unreachable!(),
+            };
+
             findings.push(Finding {
-                id: format!("IMPACT-{:03}", findings.len() + 1),
+                id: format!("{}-{:03}", id_prefix, findings.len() + 1),
                 severity,
                 message: format!(
                     "{:?} change in `{}` — {} dependent(s) affected",
@@ -290,20 +298,22 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     )
     .is_ok();
 
-    match format {
-        Format::Json => print_json(&findings, &summary),
-        Format::Sarif => print_sarif(&findings, &repo_path),
-        Format::Github => print_github(&findings, &repo_path),
-        Format::Terminal => print_terminal(
-            &findings,
-            &summary,
-            &repo_path,
-            start,
-            &all_suppressed,
-            cli.show_suppressed,
-            if run_log_saved { Some(&run_id) } else { None },
-        ),
+    let mut out = make_formatter(format, &repo_path, cli.show_suppressed);
+    for f in &findings {
+        out.write_finding(f, &repo_path);
     }
+    if cli.show_suppressed {
+        for sf in &all_suppressed {
+            out.write_suppressed(sf, &repo_path);
+        }
+    }
+    out.write_summary(
+        &summary,
+        &all_suppressed,
+        start.elapsed(),
+        if run_log_saved { Some(&run_id) } else { None },
+    );
+    out.finalize();
 
     let fail_on = cli.fail_on.as_deref().unwrap_or(&config.general.fail_on);
     if summary.exceeds_threshold(fail_on) {
@@ -390,31 +400,6 @@ fn load_old_graph(
             step.skip("No baseline graph available — run again to compare changes");
             None
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Format {
-    Terminal,
-    Json,
-    Sarif,
-    Github,
-}
-
-pub(crate) fn resolve_format(cli: &crate::Cli, config: &RevetConfig) -> Format {
-    if let Some(ref f) = cli.format {
-        return match f {
-            crate::OutputFormat::Json => Format::Json,
-            crate::OutputFormat::Sarif => Format::Sarif,
-            crate::OutputFormat::Github => Format::Github,
-            crate::OutputFormat::Terminal => Format::Terminal,
-        };
-    }
-    match config.output.format.as_str() {
-        "json" => Format::Json,
-        "sarif" => Format::Sarif,
-        "github" => Format::Github,
-        _ => Format::Terminal,
     }
 }
 
@@ -530,182 +515,6 @@ pub(crate) fn build_summary(
         }
     }
     summary
-}
-
-pub(crate) fn print_terminal(
-    findings: &[Finding],
-    summary: &ReviewSummary,
-    repo_path: &Path,
-    start: Instant,
-    suppressed: &[SuppressedFinding],
-    show_suppressed: bool,
-    run_id: Option<&str>,
-) {
-    println!();
-
-    // Print active findings
-    for f in findings {
-        let display_path = f.file.strip_prefix(repo_path).unwrap_or(&f.file).display();
-
-        println!(
-            "{}",
-            output::terminal::format_finding(
-                &f.severity.to_string(),
-                &f.message,
-                &display_path.to_string(),
-                f.line,
-                f.suggestion.as_deref(),
-                f.ai_note.as_deref(),
-                f.ai_false_positive,
-            )
-        );
-    }
-
-    // Optionally show suppressed findings
-    if show_suppressed && !suppressed.is_empty() {
-        if !findings.is_empty() {
-            println!();
-        }
-        for sf in suppressed {
-            let display_path = sf
-                .finding
-                .file
-                .strip_prefix(repo_path)
-                .unwrap_or(&sf.finding.file)
-                .display();
-            println!(
-                "{}",
-                output::terminal::format_suppressed_finding(
-                    &sf.finding.severity.to_string(),
-                    &sf.finding.message,
-                    &display_path.to_string(),
-                    sf.finding.line,
-                    &sf.reason,
-                )
-            );
-        }
-    }
-
-    if !findings.is_empty() || (show_suppressed && !suppressed.is_empty()) {
-        println!();
-    }
-
-    println!("  {}", "\u{2500}".repeat(60).dimmed());
-    println!(
-        "  {} \u{00b7} {} \u{00b7} {}",
-        format!("{} error(s)", summary.errors).green(),
-        format!("{} warning(s)", summary.warnings).yellow(),
-        format!("{} info", summary.info).blue()
-    );
-    if !suppressed.is_empty() {
-        // Group by reason for a readable summary
-        let baseline = suppressed.iter().filter(|s| s.reason == "baseline").count();
-        let inline = suppressed.iter().filter(|s| s.reason == "inline").count();
-        let per_path = suppressed
-            .iter()
-            .filter(|s| s.reason.starts_with("per-path"))
-            .count();
-
-        let mut parts = Vec::new();
-        if baseline > 0 {
-            parts.push(format!("{} baselined", baseline));
-        }
-        if inline > 0 {
-            parts.push(format!("{} inline", inline));
-        }
-        if per_path > 0 {
-            parts.push(format!("{} per-path", per_path));
-        }
-        println!(
-            "  {}",
-            format!(
-                "{} finding(s) suppressed ({})",
-                suppressed.len(),
-                parts.join(", ")
-            )
-            .dimmed()
-        );
-    }
-    println!(
-        "  {} files analyzed \u{00b7} {} nodes parsed",
-        summary.files_analyzed, summary.nodes_parsed
-    );
-    println!("  Time: {:.1}s", start.elapsed().as_secs_f64());
-    if let Some(id) = run_id {
-        println!("  {}", format!("Run log: revet log --show {}", id).dimmed());
-    }
-}
-
-pub(crate) fn print_json(findings: &[Finding], summary: &ReviewSummary) {
-    let json_findings: Vec<output::json::JsonFinding> = findings
-        .iter()
-        .map(|f| output::json::JsonFinding {
-            id: f.id.clone(),
-            severity: f.severity.to_string(),
-            message: f.message.clone(),
-            file: f.file.display().to_string(),
-            line: f.line,
-        })
-        .collect();
-
-    let out = output::json::JsonOutput {
-        findings: json_findings,
-        summary: output::json::JsonSummary {
-            errors: summary.errors,
-            warnings: summary.warnings,
-            info: summary.info,
-        },
-    };
-
-    match serde_json::to_string_pretty(&out) {
-        Ok(json) => println!("{}", json),
-        Err(e) => eprintln!("Failed to serialize JSON: {}", e),
-    }
-}
-
-pub(crate) fn print_sarif(findings: &[Finding], repo_path: &Path) {
-    let log = output::sarif::build_sarif_log(findings, repo_path);
-    match serde_json::to_string_pretty(&log) {
-        Ok(json) => println!("{}", json),
-        Err(e) => eprintln!("Failed to serialize SARIF: {}", e),
-    }
-}
-
-pub(crate) fn print_no_files(format: Format, start: Instant) {
-    match format {
-        Format::Json => {
-            let out = output::json::JsonOutput {
-                findings: vec![],
-                summary: output::json::JsonSummary {
-                    errors: 0,
-                    warnings: 0,
-                    info: 0,
-                },
-            };
-            if let Ok(json) = serde_json::to_string_pretty(&out) {
-                println!("{}", json);
-            }
-        }
-        Format::Sarif => {
-            let log = output::sarif::build_sarif_log(&[], Path::new("."));
-            if let Ok(json) = serde_json::to_string_pretty(&log) {
-                println!("{}", json);
-            }
-        }
-        Format::Github => {
-            // No files, no annotations — nothing to output
-        }
-        Format::Terminal => {
-            println!("  {}", "No supported files found.".dimmed());
-            println!("  Time: {:.1}s", start.elapsed().as_secs_f64());
-        }
-    }
-}
-
-pub(crate) fn print_github(findings: &[Finding], repo_path: &Path) {
-    for f in findings {
-        println!("{}", output::github::format_finding(f, repo_path));
-    }
 }
 
 /// Post findings as inline GitHub PR review comments.

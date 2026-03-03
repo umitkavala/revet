@@ -1,15 +1,18 @@
-//! SARIF 2.1.0 output formatting
+//! SARIF 2.1.0 output formatter.
 //!
-//! Produces Static Analysis Results Interchange Format for GitHub Code Scanning
-//! and IDE consumption (VS Code, IntelliJ).
+//! Accumulates findings in memory and serialises the full SARIF document on
+//! [`finalize`](super::OutputFormatter::finalize).
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 
-use revet_core::{Finding, Severity};
+use revet_core::{Finding, ReviewSummary, Severity, SuppressedFinding};
 
-// ── SARIF 2.1.0 structs ─────────────────────────────────────────
+use super::OutputFormatter;
+
+// ── SARIF 2.1.0 structs ──────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -91,16 +94,28 @@ pub struct SarifMessage {
     pub text: String,
 }
 
-// ── Rule descriptions ────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn rule_description(prefix: &str) -> &'static str {
     match prefix {
         "SEC" => "Secret exposure detected",
         "SQL" => "SQL injection vulnerability",
+        "CMD" => "Command injection vulnerability",
+        "DESER" => "Insecure deserialization",
+        "SSRF" => "Server-side request forgery",
+        "PATH" => "Path traversal vulnerability",
+        "LOG" => "Sensitive data in logs",
         "ML" => "ML pipeline anti-pattern",
         "INFRA" => "Infrastructure misconfiguration",
-        "IMPACT" => "Breaking change impact",
+        "BREAKING" | "IMPACT" => "Breaking change impact",
         "PARSE" => "Parse error",
+        "CYCLE" => "Circular import",
+        "CMPLX" => "Excessive function complexity",
+        "DEAD" => "Unused exported symbol",
+        "DIMPORT" => "Dead import",
+        "ENDPT" => "Hardcoded endpoint",
+        "MAGIC" => "Magic number",
+        "COV" => "Missing test coverage",
         _ => "Code review finding",
     }
 }
@@ -113,12 +128,10 @@ fn severity_to_level(severity: &Severity) -> &'static str {
     }
 }
 
-/// Extract the rule prefix from a finding ID (e.g. "SEC" from "SEC-001").
 fn extract_prefix(id: &str) -> &str {
     id.split('-').next().unwrap_or(id)
 }
 
-/// Make a relative path with forward slashes from a potentially absolute file path.
 fn relative_uri(file: &Path, repo_path: &Path) -> String {
     let rel = file.strip_prefix(repo_path).unwrap_or(file);
     rel.components()
@@ -127,11 +140,10 @@ fn relative_uri(file: &Path, repo_path: &Path) -> String {
         .join("/")
 }
 
-// ── Public API ───────────────────────────────────────────────────
+// ── Public builder (kept for tests) ──────────────────────────────────────────
 
-/// Build a complete SARIF 2.1.0 log from a list of findings.
 pub fn build_sarif_log(findings: &[Finding], repo_path: &Path) -> SarifLog {
-    // 1. Collect unique rule prefixes in stable order
+    // Collect unique rule prefixes in stable order
     let mut prefix_set: BTreeMap<String, &'static str> = BTreeMap::new();
     for f in findings {
         let prefix = extract_prefix(&f.id).to_string();
@@ -140,7 +152,6 @@ pub fn build_sarif_log(findings: &[Finding], repo_path: &Path) -> SarifLog {
             .or_insert_with(|| rule_description(&prefix));
     }
 
-    // 2. Build rules array
     let rules: Vec<SarifReportingDescriptor> = prefix_set
         .iter()
         .map(|(prefix, desc)| SarifReportingDescriptor {
@@ -151,14 +162,12 @@ pub fn build_sarif_log(findings: &[Finding], repo_path: &Path) -> SarifLog {
         })
         .collect();
 
-    // Build prefix → index lookup
     let prefix_index: BTreeMap<&str, usize> = prefix_set
         .keys()
         .enumerate()
         .map(|(i, k)| (k.as_str(), i))
         .collect();
 
-    // 3. Build results array
     let results: Vec<SarifResult> = findings
         .iter()
         .map(|f| {
@@ -191,7 +200,6 @@ pub fn build_sarif_log(findings: &[Finding], repo_path: &Path) -> SarifLog {
         })
         .collect();
 
-    // 4. Assemble
     SarifLog {
         schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json".to_string(),
         version: "2.1.0".to_string(),
@@ -200,11 +208,55 @@ pub fn build_sarif_log(findings: &[Finding], repo_path: &Path) -> SarifLog {
                 driver: SarifDriver {
                     name: "Revet".to_string(),
                     semantic_version: revet_core::VERSION.to_string(),
-                    information_uri: "https://github.com/anthropics/revet".to_string(),
+                    information_uri: "https://github.com/umitkavala/revet".to_string(),
                     rules,
                 },
             },
             results,
         }],
+    }
+}
+
+// ── Formatter struct ─────────────────────────────────────────────────────────
+
+pub struct SarifFormatter {
+    findings: Vec<Finding>,
+    repo_path: PathBuf,
+}
+
+impl SarifFormatter {
+    pub fn new(repo_path: PathBuf) -> Self {
+        Self {
+            findings: Vec::new(),
+            repo_path,
+        }
+    }
+}
+
+impl OutputFormatter for SarifFormatter {
+    fn write_finding(&mut self, finding: &Finding, _repo_path: &Path) {
+        self.findings.push(finding.clone());
+    }
+
+    fn write_summary(
+        &mut self,
+        _summary: &ReviewSummary,
+        _suppressed: &[SuppressedFinding],
+        _elapsed: Duration,
+        _run_id: Option<&str>,
+    ) {
+        // SARIF has no summary section — nothing to do.
+    }
+
+    fn write_no_files(&mut self, _elapsed: Duration) {
+        // Empty findings list — finalize will emit a valid empty SARIF document.
+    }
+
+    fn finalize(&mut self) {
+        let log = build_sarif_log(&self.findings, &self.repo_path);
+        match serde_json::to_string_pretty(&log) {
+            Ok(json) => println!("{}", json),
+            Err(e) => eprintln!("Failed to serialize SARIF: {}", e),
+        }
     }
 }

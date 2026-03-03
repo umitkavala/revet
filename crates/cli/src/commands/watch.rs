@@ -13,10 +13,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use super::review::{
-    build_summary, has_extension, has_filename, print_github, print_json, print_no_files,
-    print_sarif, print_terminal, resolve_format, Format,
-};
+use super::review::{build_summary, has_extension, has_filename};
+use crate::output::{make_formatter, resolve_format};
 
 pub fn run(path: Option<&Path>, cli: &crate::Cli, debounce_ms: u64, no_clear: bool) -> Result<()> {
     let repo_path = path.unwrap_or_else(|| Path::new("."));
@@ -154,7 +152,9 @@ fn run_analysis(repo_path: &Path, cli: &crate::Cli) -> Result<()> {
     eprintln!("{} ({} files)", "done".green(), files.len());
 
     if files.is_empty() {
-        print_no_files(format, start);
+        let mut out = make_formatter(format, repo_path, false);
+        out.write_no_files(start.elapsed());
+        out.finalize();
         return Ok(());
     }
 
@@ -235,20 +235,17 @@ fn run_analysis(repo_path: &Path, cli: &crate::Cli) -> Result<()> {
     // ── 8. Output ─────────────────────────────────────────────
     let summary = build_summary(&findings, files.len(), node_count);
 
-    match format {
-        Format::Json => print_json(&findings, &summary),
-        Format::Sarif => print_sarif(&findings, repo_path),
-        Format::Github => print_github(&findings, repo_path),
-        Format::Terminal => print_terminal(
-            &findings,
-            &summary,
-            repo_path,
-            start,
-            &all_suppressed,
-            cli.show_suppressed,
-            None,
-        ),
+    let mut out = make_formatter(format, repo_path, cli.show_suppressed);
+    for f in &findings {
+        out.write_finding(f, repo_path);
     }
+    if cli.show_suppressed {
+        for sf in &all_suppressed {
+            out.write_suppressed(sf, repo_path);
+        }
+    }
+    out.write_summary(&summary, &all_suppressed, start.elapsed(), None);
+    out.finalize();
 
     Ok(())
 }
