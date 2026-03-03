@@ -68,6 +68,10 @@ pub struct Finding {
     /// AI assessed this as likely a false positive
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub ai_false_positive: bool,
+
+    /// Caller locations ("path:line") affected by this finding (e.g. impact analysis)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub callers: Vec<String>,
 }
 
 impl Default for Finding {
@@ -83,6 +87,7 @@ impl Default for Finding {
             fix_kind: None,
             ai_note: None,
             ai_false_positive: false,
+            callers: Vec::new(),
         }
     }
 }

@@ -34,7 +34,9 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
     eprintln!(
         "{}",
-        format!("  revet v{} — analyzing repository", revet_core::VERSION).bold()
+        format!("  revet v{} — analyzing repository", revet_core::VERSION)
+            .bold()
+            .yellow()
     );
     eprintln!();
 
@@ -118,6 +120,24 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
                 revet_core::ChangeClassification::Safe => unreachable!(),
             };
 
+            // Collect caller locations (direct dependents only, to avoid noise)
+            let callers: Vec<String> = change
+                .direct_dependents
+                .iter()
+                .filter_map(|&dep_id| analysis.new_graph().node(dep_id))
+                .map(|n| {
+                    let rel = n
+                        .file_path()
+                        .strip_prefix(&repo_path)
+                        .unwrap_or(n.file_path());
+                    if n.line() > 0 {
+                        format!("{}:{}", rel.display(), n.line())
+                    } else {
+                        rel.display().to_string()
+                    }
+                })
+                .collect();
+
             findings.push(Finding {
                 id: format!("{}-{:03}", id_prefix, findings.len() + 1),
                 severity,
@@ -130,6 +150,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
                 file: node.file_path().clone(),
                 line: node.line(),
                 affected_dependents: total_deps,
+                callers,
                 suggestion: None,
                 fix_kind: None,
                 ..Default::default()

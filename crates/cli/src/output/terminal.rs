@@ -198,7 +198,22 @@ fn finding_block(f: &Finding, repo_path: &Path) -> String {
     let mut lines = vec![format!("  {}  {}   {}", icon, colored_label, file_line)];
 
     for msg_line in f.message.lines() {
-        lines.push(format!("  {}  {}", pipe, msg_line));
+        // Lines starting with "→" are caller/path references — highlight in cyan
+        let trimmed = msg_line.trim_start();
+        if trimmed.starts_with('\u{2192}') {
+            lines.push(format!("  {}  {}", pipe, trimmed.cyan()));
+        } else {
+            lines.push(format!("  {}  {}", pipe, msg_line.dimmed()));
+        }
+    }
+
+    // Render caller locations as cyan arrow lines
+    for caller in &f.callers {
+        lines.push(format!(
+            "  {}  {}",
+            pipe,
+            format!("\u{2192} {}", caller).cyan()
+        ));
     }
 
     if let Some(s) = &f.suggestion {
