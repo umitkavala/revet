@@ -71,14 +71,49 @@ runs:
     - name: Set revet binary path (source)
       if: inputs.version == 'source'
       shell: bash
-      run: echo "REVET_BIN=${{ github.workspace }}/target/release/revet" >> "$GITHUB_ENV"
+      run: |
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          echo "REVET_BIN=${{ github.workspace }}/target/release/revet.exe" >> "$GITHUB_ENV"
+        else
+          echo "REVET_BIN=${{ github.workspace }}/target/release/revet" >> "$GITHUB_ENV"
+        fi
 
     - name: Download revet release
       if: inputs.version != 'source'
       shell: bash
       run: |
-        echo "::error::Pre-built binary downloads are not yet supported. Use version: 'source' to build from HEAD."
-        exit 1
+        VERSION="${{ inputs.version }}"
+        if [ "$VERSION" = "latest" ]; then
+          VERSION=$(gh release view --repo umitkavala/revet --json tagName -q .tagName)
+        fi
+
+        OS="${{ runner.os }}"
+        ARCH="${{ runner.arch }}"
+        EXT=""
+
+        case "$OS-$ARCH" in
+          Linux-X64)    BINARY="revet-linux-x64" ;;
+          Linux-ARM64)  BINARY="revet-linux-arm64" ;;
+          macOS-X64)    BINARY="revet-darwin-x64" ;;
+          macOS-ARM64)  BINARY="revet-darwin-arm64" ;;
+          Windows-X64)  BINARY="revet-windows-x64.exe"; EXT=".exe" ;;
+          *)
+            echo "::error::Unsupported platform: $OS/$ARCH"
+            exit 1 ;;
+        esac
+
+        mkdir -p "$RUNNER_TEMP/revet-bin"
+        gh release download "$VERSION" \
+          --repo umitkavala/revet \
+          --pattern "$BINARY" \
+          --dir "$RUNNER_TEMP/revet-bin"
+
+        DEST="$RUNNER_TEMP/revet-bin/revet${EXT}"
+        mv "$RUNNER_TEMP/revet-bin/$BINARY" "$DEST"
+        chmod +x "$DEST" 2>/dev/null || true
+        echo "REVET_BIN=$DEST" >> "$GITHUB_ENV"
+      env:
+        GH_TOKEN: ${{ github.token }}
 
     # ── 4. Determine diff base ────────────────────────────────────
     - name: Determine diff base
