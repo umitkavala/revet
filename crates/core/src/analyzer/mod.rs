@@ -23,6 +23,7 @@ pub mod secret_exposure;
 pub mod sensitive_logging;
 pub mod sql_injection;
 pub mod ssrf;
+pub mod test_coverage;
 pub mod toolchain;
 pub mod unused_exports;
 
@@ -112,6 +113,7 @@ impl AnalyzerDispatcher {
                 Box::new(circular_imports::CircularImportsAnalyzer::new()),
                 Box::new(complexity::ComplexityAnalyzer::new()),
                 Box::new(dead_imports::DeadImportsAnalyzer::new()),
+                Box::new(test_coverage::TestCoverageAnalyzer::new()),
             ],
         }
     }

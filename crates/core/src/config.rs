@@ -137,6 +137,10 @@ pub struct ModulesConfig {
     #[serde(default)]
     pub magic_numbers: bool,
 
+    /// Detect public functions/classes with no mention in any test file
+    #[serde(default)]
+    pub test_coverage: bool,
+
     /// Module-specific configurations
     #[serde(flatten)]
     pub module_configs: HashMap<String, toml::Value>,
@@ -291,6 +295,7 @@ impl Default for ModulesConfig {
             toolchain: false,
             hardcoded_endpoints: false,
             magic_numbers: false,
+            test_coverage: false,
             module_configs: HashMap::new(),
         }
     }
