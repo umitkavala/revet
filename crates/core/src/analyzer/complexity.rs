@@ -21,9 +21,6 @@ const FN_LEN_ERROR: usize = 100;
 const PARAM_WARN: usize = 5;
 const PARAM_ERROR: usize = 8;
 
-const COMPLEXITY_WARN: usize = 10;
-const COMPLEXITY_ERROR: usize = 20;
-
 const NESTING_WARN: usize = 4;
 const NESTING_ERROR: usize = 6;
 
@@ -237,7 +234,9 @@ impl GraphAnalyzer for ComplexityAnalyzer {
         config.modules.complexity
     }
 
-    fn analyze_graph(&self, graph: &CodeGraph, _config: &RevetConfig) -> Vec<Finding> {
+    fn analyze_graph(&self, graph: &CodeGraph, config: &RevetConfig) -> Vec<Finding> {
+        let complexity_warn = config.modules.complexity_threshold;
+        let complexity_error = complexity_warn * 2;
         let mut findings = Vec::new();
 
         for (_, node) in graph.nodes() {
@@ -364,7 +363,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
 
             // Cyclomatic complexity
             let complexity = cyclomatic_complexity(fn_lines, lang);
-            if complexity >= COMPLEXITY_ERROR {
+            if complexity >= complexity_error {
                 findings.push(Finding {
                     id: String::new(),
                     severity: Severity::Error,
@@ -372,7 +371,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
                         "Function `{}` has cyclomatic complexity of {} (max recommended: {})",
                         node.name(),
                         complexity,
-                        COMPLEXITY_ERROR
+                        complexity_error
                     ),
                     file: file_path.clone(),
                     line: start_line,
@@ -384,7 +383,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
                     fix_kind: None,
                     ..Default::default()
                 });
-            } else if complexity >= COMPLEXITY_WARN {
+            } else if complexity >= complexity_warn {
                 findings.push(Finding {
                     id: String::new(),
                     severity: Severity::Warning,
@@ -392,7 +391,7 @@ impl GraphAnalyzer for ComplexityAnalyzer {
                         "Function `{}` has cyclomatic complexity of {} (recommended: <{})",
                         node.name(),
                         complexity,
-                        COMPLEXITY_WARN
+                        complexity_warn
                     ),
                     file: file_path.clone(),
                     line: start_line,

@@ -121,6 +121,10 @@ pub struct ModulesConfig {
     #[serde(default)]
     pub complexity: bool,
 
+    /// Cyclomatic complexity threshold — warn above this value (default: 10, error at 2x)
+    #[serde(default = "default_complexity_threshold")]
+    pub complexity_threshold: usize,
+
     /// Detect imported symbols that are never used within the same file
     #[serde(default)]
     pub dead_imports: bool,
@@ -221,6 +225,10 @@ fn default_fail_on() -> String {
     "error".to_string()
 }
 
+fn default_complexity_threshold() -> usize {
+    10
+}
+
 fn default_true() -> bool {
     true
 }
@@ -291,6 +299,7 @@ impl Default for ModulesConfig {
             dead_code: false,
             cycles: true,
             complexity: false,
+            complexity_threshold: 10,
             dead_imports: false,
             toolchain: false,
             hardcoded_endpoints: false,
