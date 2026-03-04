@@ -176,14 +176,10 @@ fn test_empty_file_path_produces_no_location() {
     }];
     let log = build_sarif_log(&findings, Path::new("/repo"));
 
-    let result = &log.runs[0].results[0];
     assert!(
-        result.locations.is_empty(),
-        "empty file path must produce zero locations, not an empty URI"
+        log.runs[0].results.is_empty(),
+        "empty file path must produce no SARIF result (skipped entirely to avoid invalid empty URI)"
     );
-    // Rule and message should still be present
-    assert_eq!(result.rule_id, "IMPACT");
-    assert_eq!(result.message.text, "repo-level finding");
 }
 
 #[test]
