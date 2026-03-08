@@ -233,7 +233,7 @@ fn run_analysis(repo_path: &Path, cli: &crate::Cli) -> Result<()> {
     }
 
     // ── 8. Output ─────────────────────────────────────────────
-    let summary = build_summary(&findings, files.len(), node_count);
+    let summary = build_summary(&findings, &files, node_count);
 
     let mut out = make_formatter(format, repo_path, cli.show_suppressed);
     for f in &findings {

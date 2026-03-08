@@ -143,11 +143,23 @@ impl OutputFormatter for TerminalFormatter {
             );
         }
 
+        // Files analyzed with optional language breakdown
+        let lang_detail = if summary.files_by_language.is_empty() {
+            String::new()
+        } else {
+            let mut langs: Vec<(&String, &usize)> = summary.files_by_language.iter().collect();
+            langs.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+            let parts: Vec<String> = langs
+                .iter()
+                .map(|(lang, count)| format!("{}: {}", lang, count))
+                .collect();
+            format!(" ({})", parts.join(", "))
+        };
         println!(
             "  {}",
             format!(
-                "{} files analyzed \u{00b7} {} nodes parsed",
-                summary.files_analyzed, summary.nodes_parsed
+                "{} files analyzed{} \u{00b7} {} nodes parsed",
+                summary.files_analyzed, lang_detail, summary.nodes_parsed
             )
             .dimmed()
         );

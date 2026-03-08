@@ -2,6 +2,7 @@
 
 use crate::config::GateConfig;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Severity level of a finding
@@ -101,6 +102,9 @@ pub struct ReviewSummary {
     pub info: usize,
     pub files_analyzed: usize,
     pub nodes_parsed: usize,
+    /// Count of analyzed files per language (e.g., "Rust" → 38, "Python" → 4)
+    #[serde(default)]
+    pub files_by_language: HashMap<String, usize>,
 }
 
 impl ReviewSummary {

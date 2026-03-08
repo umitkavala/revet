@@ -306,7 +306,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     }
 
     // ── 6. Output ────────────────────────────────────────────────
-    let summary = build_summary(&findings, files.len(), node_count);
+    let summary = build_summary(&findings, &files, node_count);
 
     // Write run log (best-effort — don't fail the review on log errors)
     let run_id = run_log::new_run_id();
@@ -540,11 +540,11 @@ pub(crate) fn has_filename(path: &Path, filenames: &[&str]) -> bool {
 
 pub(crate) fn build_summary(
     findings: &[Finding],
-    files_analyzed: usize,
+    files: &[PathBuf],
     nodes_parsed: usize,
 ) -> ReviewSummary {
     let mut summary = ReviewSummary {
-        files_analyzed,
+        files_analyzed: files.len(),
         nodes_parsed,
         ..Default::default()
     };
@@ -555,7 +555,40 @@ pub(crate) fn build_summary(
             Severity::Info => summary.info += 1,
         }
     }
+    for path in files {
+        let lang = ext_to_language(path);
+        *summary.files_by_language.entry(lang).or_default() += 1;
+    }
     summary
+}
+
+fn ext_to_language(path: &Path) -> String {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("rs") => "Rust",
+        Some("py") => "Python",
+        Some("ts") | Some("tsx") => "TypeScript",
+        Some("js") | Some("jsx") => "JavaScript",
+        Some("go") => "Go",
+        Some("java") => "Java",
+        Some("kt") => "Kotlin",
+        Some("rb") => "Ruby",
+        Some("cs") => "C#",
+        Some("cpp") | Some("cc") | Some("cxx") => "C++",
+        Some("c") | Some("h") => "C",
+        Some("swift") => "Swift",
+        Some("toml") => "TOML",
+        Some("yaml") | Some("yml") => "YAML",
+        Some("json") => "JSON",
+        Some("tf") => "Terraform",
+        Some("sh") | Some("bash") => "Shell",
+        Some(e) => e,
+        None => match path.file_name().and_then(|n| n.to_str()) {
+            Some("Dockerfile") => "Dockerfile",
+            Some("Makefile") => "Makefile",
+            _ => "other",
+        },
+    }
+    .to_string()
 }
 
 /// Post findings as inline GitHub PR review comments.

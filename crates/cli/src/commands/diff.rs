@@ -175,7 +175,7 @@ pub fn run(base: &str, cli: &crate::Cli) -> Result<ReviewExitCode> {
     }
 
     // ── 10. Output ───────────────────────────────────────────────
-    let summary = build_summary(&findings, files.len(), node_count);
+    let summary = build_summary(&findings, &files, node_count);
 
     let mut out = make_formatter(format, &repo_path, cli.show_suppressed);
     for f in &findings {
