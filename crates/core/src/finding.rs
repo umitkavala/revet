@@ -124,6 +124,12 @@ impl ReviewSummary {
         }
     }
 
+    /// Estimate total technical debt in minutes using default severity weights:
+    /// error = 60 min, warning = 30 min, info = 10 min.
+    pub fn total_debt_minutes(&self) -> usize {
+        self.errors * 60 + self.warnings * 30 + self.info * 10
+    }
+
     /// Check whether findings violate a quality gate (per-severity count limits).
     ///
     /// Returns `true` if any configured limit is exceeded.

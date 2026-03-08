@@ -112,6 +112,13 @@ impl OutputFormatter for TerminalFormatter {
             errors_str, warnings_str, info_str
         );
 
+        // Technical debt estimate
+        let debt = summary.total_debt_minutes();
+        if debt > 0 {
+            let debt_str = format_debt(debt);
+            println!("  {}", format!("Technical debt: {}", debt_str).dimmed());
+        }
+
         // Suppression breakdown
         if !suppressed.is_empty() {
             let baseline = suppressed.iter().filter(|s| s.reason == "baseline").count();
@@ -180,6 +187,22 @@ impl OutputFormatter for TerminalFormatter {
             "  {}",
             format!("Time: {:.1}s", elapsed.as_secs_f64()).green()
         );
+    }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+fn format_debt(minutes: usize) -> String {
+    if minutes < 60 {
+        format!("{}m", minutes)
+    } else {
+        let h = minutes / 60;
+        let m = minutes % 60;
+        if m == 0 {
+            format!("{}h", h)
+        } else {
+            format!("{}h {}m", h, m)
+        }
     }
 }
 
