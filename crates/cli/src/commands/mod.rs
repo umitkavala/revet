@@ -6,4 +6,5 @@ pub mod explain;
 pub mod init;
 pub mod log;
 pub mod review;
+pub mod stats;
 pub mod watch;

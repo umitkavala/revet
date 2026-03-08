@@ -39,6 +39,9 @@ fn main() -> Result<()> {
         Some(Commands::Log { ref show }) => {
             commands::log::run(std::path::Path::new("."), show.as_deref())?;
         }
+        Some(Commands::Stats { last }) => {
+            commands::stats::run(std::path::Path::new("."), last)?;
+        }
         None => {
             let exit_code = commands::review::run(None, &cli)?;
             if exit_code == commands::review::ReviewExitCode::FindingsExceedThreshold {

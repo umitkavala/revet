@@ -130,6 +130,13 @@ pub enum Commands {
         #[arg(long)]
         show: Option<String>,
     },
+
+    /// Show code quality statistics from run history
+    Stats {
+        /// Limit to the last N runs (default: all)
+        #[arg(long, short = 'n')]
+        last: Option<usize>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
