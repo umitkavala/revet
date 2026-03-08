@@ -4,6 +4,7 @@
 
 Revet combines deterministic static analysis with selective LLM reasoning. It builds a persistent code intelligence graph, runs parallel domain analyzers, and uses AI only for ambiguous findings.
 
+[![crates.io](https://img.shields.io/crates/v/revet.svg)](https://crates.io/crates/revet)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Quick Start
@@ -37,6 +38,16 @@ Full docs at **[umitkavala.github.io/revet](https://umitkavala.github.io/revet/)
 - [Configuration](https://umitkavala.github.io/revet/docs/configuration)
 - [CI/CD Integration](https://umitkavala.github.io/revet/docs/ci-cd)
 - [Architecture](https://umitkavala.github.io/revet/docs/architecture)
+
+## GitHub Action
+
+```yaml
+- uses: umitkavala/revet@v0.2.7
+  with:
+    mode: diff          # diff (PR changes only) or full
+    gate: 'error:0'     # fail if any errors
+    sarif-upload: 'true'
+```
 
 ## Contributing
 
