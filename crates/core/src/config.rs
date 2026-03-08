@@ -47,6 +47,52 @@ fn default_warning() -> String {
     "warning".to_string()
 }
 
+/// Quality gate: per-severity maximum finding counts.
+///
+/// Set in `.revet.toml` under `[gate]`, or via `--gate error:0,warning:5` on the CLI.
+/// A `None` value means "unlimited" for that severity.
+///
+/// ```toml
+/// [gate]
+/// error_max = 0      # fail if any errors
+/// warning_max = 5    # fail if more than 5 warnings
+/// ```
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GateConfig {
+    /// Maximum allowed errors (None = unlimited)
+    pub error_max: Option<usize>,
+    /// Maximum allowed warnings (None = unlimited)
+    pub warning_max: Option<usize>,
+    /// Maximum allowed info findings (None = unlimited)
+    pub info_max: Option<usize>,
+}
+
+impl GateConfig {
+    /// Parse `"error:0,warning:5"` format produced by the `--gate` CLI flag.
+    pub fn from_flag(s: &str) -> Self {
+        let mut cfg = GateConfig::default();
+        for part in s.split(',') {
+            let part = part.trim();
+            if let Some((sev, count)) = part.split_once(':') {
+                if let Ok(n) = count.trim().parse::<usize>() {
+                    match sev.trim() {
+                        "error" => cfg.error_max = Some(n),
+                        "warning" => cfg.warning_max = Some(n),
+                        "info" => cfg.info_max = Some(n),
+                        _ => {}
+                    }
+                }
+            }
+        }
+        cfg
+    }
+
+    /// Returns `true` if no limits are configured (gate is effectively disabled).
+    pub fn is_empty(&self) -> bool {
+        self.error_max.is_none() && self.warning_max.is_none() && self.info_max.is_none()
+    }
+}
+
 /// Main configuration structure for .revet.toml
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RevetConfig {
@@ -64,6 +110,10 @@ pub struct RevetConfig {
 
     #[serde(default)]
     pub output: OutputConfig,
+
+    /// Quality gate: per-severity maximum finding counts
+    #[serde(default)]
+    pub gate: GateConfig,
 
     /// User-defined custom rules
     #[serde(default, rename = "rules")]

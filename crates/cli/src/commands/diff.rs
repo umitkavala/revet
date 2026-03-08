@@ -4,8 +4,8 @@ use anyhow::Result;
 use colored::Colorize;
 use revet_core::{
     apply_fixes, filter_findings, filter_findings_by_diff, filter_findings_by_inline,
-    AnalyzerDispatcher, Baseline, DiffAnalyzer, Finding, ParserDispatcher, RevetConfig, Severity,
-    SuppressedFinding,
+    AnalyzerDispatcher, Baseline, DiffAnalyzer, Finding, GateConfig, ParserDispatcher, RevetConfig,
+    Severity, SuppressedFinding,
 };
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -200,8 +200,21 @@ pub fn run(base: &str, cli: &crate::Cli) -> Result<ReviewExitCode> {
         );
     }
 
-    let fail_on = cli.fail_on.as_deref().unwrap_or(&config.general.fail_on);
-    if summary.exceeds_threshold(fail_on) {
+    // Quality gate (--gate) takes precedence over --fail-on
+    let gate = cli
+        .gate
+        .as_deref()
+        .map(GateConfig::from_flag)
+        .unwrap_or_else(|| config.gate.clone());
+
+    let exceeded = if !gate.is_empty() {
+        summary.exceeds_gate(&gate)
+    } else {
+        let fail_on = cli.fail_on.as_deref().unwrap_or(&config.general.fail_on);
+        summary.exceeds_threshold(fail_on)
+    };
+
+    if exceeded {
         Ok(ReviewExitCode::FindingsExceedThreshold)
     } else {
         Ok(ReviewExitCode::Success)

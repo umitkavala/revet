@@ -6,7 +6,7 @@ use revet_core::{
     apply_fixes, create_store, discover_files, discover_files_extended, filter_findings,
     filter_findings_by_diff, filter_findings_by_inline, filter_findings_by_path_rules,
     reconstruct_graph, AnalyzerDispatcher, Baseline, CodeGraph, DiffAnalyzer, FileGraphCache,
-    Finding, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore, ImpactAnalysis,
+    Finding, GateConfig, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore, ImpactAnalysis,
     ParserDispatcher, RevetConfig, ReviewSummary, Severity, SuppressedFinding,
 };
 use std::path::{Path, PathBuf};
@@ -336,8 +336,21 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     );
     out.finalize();
 
-    let fail_on = cli.fail_on.as_deref().unwrap_or(&config.general.fail_on);
-    if summary.exceeds_threshold(fail_on) {
+    // Quality gate (--gate) takes precedence over --fail-on
+    let gate = cli
+        .gate
+        .as_deref()
+        .map(GateConfig::from_flag)
+        .unwrap_or_else(|| config.gate.clone());
+
+    let exceeded = if !gate.is_empty() {
+        summary.exceeds_gate(&gate)
+    } else {
+        let fail_on = cli.fail_on.as_deref().unwrap_or(&config.general.fail_on);
+        summary.exceeds_threshold(fail_on)
+    };
+
+    if exceeded {
         Ok(ReviewExitCode::FindingsExceedThreshold)
     } else {
         Ok(ReviewExitCode::Success)

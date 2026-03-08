@@ -1,5 +1,6 @@
 //! Finding types that bridge analysis results to output formatters
 
+use crate::config::GateConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -117,5 +118,21 @@ impl ReviewSummary {
             "never" => false,
             _ => self.errors > 0, // default to "error" for unknown values
         }
+    }
+
+    /// Check whether findings violate a quality gate (per-severity count limits).
+    ///
+    /// Returns `true` if any configured limit is exceeded.
+    pub fn exceeds_gate(&self, gate: &GateConfig) -> bool {
+        if gate.error_max.is_some_and(|max| self.errors > max) {
+            return true;
+        }
+        if gate.warning_max.is_some_and(|max| self.warnings > max) {
+            return true;
+        }
+        if gate.info_max.is_some_and(|max| self.info > max) {
+            return true;
+        }
+        false
     }
 }

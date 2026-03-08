@@ -42,6 +42,11 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub fail_on: Option<String>,
 
+    /// Quality gate: per-severity max finding counts (e.g. "error:0,warning:5").
+    /// Overrides --fail-on when specified.
+    #[arg(long, global = true)]
+    pub gate: Option<String>,
+
     /// Apply automatic fixes
     #[arg(long, global = true)]
     pub fix: bool,
