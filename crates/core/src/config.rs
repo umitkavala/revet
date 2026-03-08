@@ -427,4 +427,84 @@ impl RevetConfig {
         std::fs::write(path, contents)?;
         Ok(())
     }
+
+    /// Validate the configuration and return lists of errors and warnings.
+    ///
+    /// Errors are fatal (bad values); warnings are advisory (surprising but legal).
+    /// An empty errors list means the config is valid.
+    pub fn validate(&self) -> (Vec<String>, Vec<String>) {
+        let mut errors = Vec::new();
+        let mut warnings = Vec::new();
+
+        // [general]
+        let valid_fail_on = ["error", "warning", "info", "never"];
+        if !valid_fail_on.contains(&self.general.fail_on.as_str()) {
+            errors.push(format!(
+                "[general] fail_on = {:?} is invalid. Must be one of: error, warning, info, never",
+                self.general.fail_on
+            ));
+        }
+        if self.general.diff_base.is_empty() {
+            warnings.push("[general] diff_base is empty — defaulting to \"main\"".to_string());
+        }
+
+        // [output]
+        let valid_formats = ["terminal", "json", "sarif", "github"];
+        if !valid_formats.contains(&self.output.format.as_str()) {
+            errors.push(format!(
+                "[output] format = {:?} is invalid. Must be one of: terminal, json, sarif, github",
+                self.output.format
+            ));
+        }
+
+        // [ai]
+        let valid_providers = ["anthropic", "openai", "ollama"];
+        if !valid_providers.contains(&self.ai.provider.as_str()) {
+            errors.push(format!(
+                "[ai] provider = {:?} is invalid. Must be one of: anthropic, openai, ollama",
+                self.ai.provider
+            ));
+        }
+
+        // [rules]
+        let valid_severities = ["error", "warning", "info"];
+        for (i, rule) in self.rules.iter().enumerate() {
+            let label = rule
+                .id
+                .as_deref()
+                .map(|id| format!("rule {:?}", id))
+                .unwrap_or_else(|| format!("rule[{}]", i));
+
+            if !valid_severities.contains(&rule.severity.as_str()) {
+                errors.push(format!(
+                    "[rules] {}: severity = {:?} is invalid. Must be: error, warning, info",
+                    label, rule.severity
+                ));
+            }
+            if let Err(e) = regex::Regex::new(&rule.pattern) {
+                errors.push(format!(
+                    "[rules] {}: invalid regex pattern {:?}: {}",
+                    label, rule.pattern, e
+                ));
+            }
+            if let Some(fix_find) = &rule.fix_find {
+                if let Err(e) = regex::Regex::new(fix_find) {
+                    errors.push(format!(
+                        "[rules] {}: invalid fix_find regex {:?}: {}",
+                        label, fix_find, e
+                    ));
+                }
+            }
+        }
+
+        // [gate]
+        if !self.gate.is_empty() && self.general.fail_on == "never" {
+            warnings.push(
+                "[gate] is configured but [general] fail_on = \"never\" — gate will still apply"
+                    .to_string(),
+            );
+        }
+
+        (errors, warnings)
+    }
 }

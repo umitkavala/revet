@@ -1,6 +1,7 @@
 //! CLI commands
 
 pub mod baseline;
+pub mod config_check;
 pub mod diff;
 pub mod explain;
 pub mod init;

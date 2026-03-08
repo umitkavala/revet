@@ -141,6 +141,9 @@ pub enum Commands {
         #[arg(long, short = 'n')]
         last: Option<usize>,
     },
+
+    /// Validate .revet.toml configuration
+    ConfigCheck,
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
