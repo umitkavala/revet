@@ -195,6 +195,14 @@ pub struct ModulesConfig {
     #[serde(default)]
     pub test_coverage: bool,
 
+    /// Detect copy-paste duplicate code blocks across files
+    #[serde(default)]
+    pub duplication: bool,
+
+    /// Minimum block size (lines) to consider as a duplicate (default: 6)
+    #[serde(default = "default_duplication_min_lines")]
+    pub duplication_min_lines: usize,
+
     /// Module-specific configurations
     #[serde(flatten)]
     pub module_configs: HashMap<String, toml::Value>,
@@ -279,6 +287,10 @@ fn default_complexity_threshold() -> usize {
     10
 }
 
+fn default_duplication_min_lines() -> usize {
+    6
+}
+
 fn default_true() -> bool {
     true
 }
@@ -355,6 +367,8 @@ impl Default for ModulesConfig {
             hardcoded_endpoints: false,
             magic_numbers: false,
             test_coverage: false,
+            duplication: false,
+            duplication_min_lines: default_duplication_min_lines(),
             module_configs: HashMap::new(),
         }
     }

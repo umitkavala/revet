@@ -80,6 +80,7 @@ fn print_modules(config: &RevetConfig) {
         ("hardcoded-endpoints", m.hardcoded_endpoints),
         ("magic-numbers", m.magic_numbers),
         ("test-coverage", m.test_coverage),
+        ("duplication", m.duplication),
     ];
 
     let on: Vec<&str> = modules

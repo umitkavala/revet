@@ -11,6 +11,7 @@ pub mod complexity;
 pub mod custom_rules;
 pub mod dead_imports;
 pub mod dependency;
+pub mod duplication;
 pub mod error_handling;
 pub mod hardcoded_endpoints;
 pub mod infra;
@@ -118,6 +119,7 @@ impl AnalyzerDispatcher {
                 Box::new(dependency::DependencyAnalyzer::new()),
                 Box::new(error_handling::ErrorHandlingAnalyzer::new()),
                 Box::new(toolchain::ToolchainAnalyzer::new()),
+                Box::new(duplication::DuplicationAnalyzer::new()),
             ],
             graph_analyzers: vec![
                 Box::new(unused_exports::UnusedExportsAnalyzer::new()),
@@ -132,6 +134,15 @@ impl AnalyzerDispatcher {
     /// Create a dispatcher with built-in analyzers plus custom rules from config
     pub fn new_with_config(config: &RevetConfig) -> Self {
         let mut dispatcher = Self::new();
+
+        // Replace the default DuplicationAnalyzer with one that uses the configured threshold
+        dispatcher.analyzers.retain(|a| a.finding_prefix() != "DUP");
+        dispatcher
+            .analyzers
+            .push(Box::new(duplication::DuplicationAnalyzer::with_min_lines(
+                config.modules.duplication_min_lines,
+            )));
+
         let custom = custom_rules::CustomRulesAnalyzer::from_config(config);
         if custom.is_enabled(config) {
             dispatcher.analyzers.push(Box::new(custom));
