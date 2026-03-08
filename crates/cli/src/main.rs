@@ -45,6 +45,9 @@ fn main() -> Result<()> {
         Some(Commands::ConfigCheck) => {
             commands::config_check::run(std::path::Path::new("."))?;
         }
+        Some(Commands::Report { ref output, last }) => {
+            commands::report::run(std::path::Path::new("."), output, last)?;
+        }
         None => {
             let exit_code = commands::review::run(None, &cli)?;
             if exit_code == commands::review::ReviewExitCode::FindingsExceedThreshold {

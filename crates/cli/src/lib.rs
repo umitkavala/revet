@@ -144,6 +144,17 @@ pub enum Commands {
 
     /// Validate .revet.toml configuration
     ConfigCheck,
+
+    /// Generate an HTML quality report from run history
+    Report {
+        /// Output file path
+        #[arg(long, short = 'o', default_value = "revet-report.html")]
+        output: String,
+
+        /// Limit to the last N runs (default: all)
+        #[arg(long, short = 'n')]
+        last: Option<usize>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
