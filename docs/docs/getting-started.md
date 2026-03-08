@@ -4,6 +4,8 @@ sidebar_position: 1
 
 # Getting Started
 
+[![crates.io](https://img.shields.io/crates/v/revet.svg)](https://crates.io/crates/revet)
+
 Revet is a developer-first code review agent that combines deterministic static analysis with selective LLM reasoning. It builds a persistent code intelligence graph first, then uses AI only for ambiguous findings.
 
 ## Install

@@ -60,6 +60,11 @@ const config: Config = {
           label: 'Docs',
         },
         {
+          href: 'https://github.com/umitkavala/revet/releases',
+          label: 'Releases',
+          position: 'right',
+        },
+        {
           href: 'https://github.com/umitkavala/revet',
           label: 'GitHub',
           position: 'right',
