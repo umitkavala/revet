@@ -33,6 +33,14 @@ toolchain            = false  # CI tools not declared in manifests
 hardcoded_endpoints  = false  # hardcoded IPs and production/staging URLs
 magic_numbers        = false  # unnamed numeric literals (magic numbers)
 test_coverage        = false  # public symbols with no test file mention
+duplication          = false  # copy-paste code blocks across files
+duplication_min_lines = 6    # minimum block size to flag (default: 6, min: 3)
+
+# Quality gate — fail the run if finding counts exceed limits
+[gate]
+error_max   = 0   # fail if any errors
+warning_max = 10  # fail if more than 10 warnings
+# info_max  = 50  # optional info limit
 
 [ignore]
 paths    = ["vendor/", "node_modules/", "dist/", "target/"]
@@ -66,6 +74,25 @@ suggestion  = "Use the logger utility instead"
 fix_find    = 'console\.log\('
 fix_replace = 'logger.info('
 ```
+
+## Quality gate
+
+The `[gate]` section lets you fail CI if finding counts exceed per-severity limits. This is an alternative to `fail_on` when you want numeric thresholds rather than a severity floor.
+
+```toml
+[gate]
+error_max   = 0    # fail if there are any errors
+warning_max = 10   # fail if warnings exceed 10
+info_max    = 50   # fail if info findings exceed 50
+```
+
+You can also override the gate on the CLI without changing the config file:
+
+```bash
+revet review --gate error:0,warning:5
+```
+
+CLI `--gate` takes precedence over `[gate]` in config, which takes precedence over `--fail-on`.
 
 ## Inline suppression
 

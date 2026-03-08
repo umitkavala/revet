@@ -13,6 +13,8 @@ revet review --fix              # apply auto-fixes
 revet review --format json      # machine-readable output
 revet review --show-suppressed  # include suppressed findings in output
 revet review --ai               # enable LLM reasoning (requires API key)
+revet review --gate error:0,warning:5   # fail if gate exceeded
+revet review --timings          # print per-analyzer timing breakdown
 ```
 
 ## Flags
@@ -30,6 +32,8 @@ revet review --ai               # enable LLM reasoning (requires API key)
 | `--module` | Run only specific modules (comma-separated, e.g. `security,ml`) |
 | `--ai` | Enable LLM reasoning — see [AI Reasoning](../ai-reasoning) |
 | `--max-cost <usd>` | Cap AI spend per run in USD (default: `$1.00` from config) |
+| `--gate <limits>` | Override quality gate: `error:0,warning:10,info:50` — exit 1 if exceeded |
+| `--timings` | Print per-analyzer timing breakdown to stderr after the run |
 
 ## Suppressed findings
 

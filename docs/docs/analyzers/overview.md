@@ -28,6 +28,8 @@ toolchain           = false
 hardcoded_endpoints = false
 magic_numbers       = false
 test_coverage       = false
+duplication         = false
+duplication_min_lines = 6     # minimum block size for duplicate detection
 ```
 
 ## Built-in analyzers
@@ -44,6 +46,7 @@ test_coverage       = false
 | [Toolchain](toolchain) | `TOOL-` | off | CI tools not declared in manifests |
 | [Hardcoded Endpoints](hardcoded-endpoints) | `ENDPT-` | off | Hardcoded IPs and production/staging URLs |
 | Magic Numbers | `MAGIC-` | off | Unnamed numeric literals that should be named constants |
+| Duplication | `DUP-` | off | Copy-paste code blocks across files (sliding-window hash) |
 | [Custom Rules](custom-rules) | `CUSTOM-` | — | Your own regex rules |
 
 ## Graph analyzers

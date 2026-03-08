@@ -13,6 +13,9 @@ sidebar_position: 1
 | [`revet watch`](watch) | Continuously scan on file save |
 | [`revet init`](init) | Generate a starter `.revet.toml` config file |
 | [`revet explain`](explain) | Explain a specific finding ID in detail |
+| [`revet stats`](stats) | Show trend metrics across recent runs (clean rate, top rules) |
+| [`revet config check`](config-check) | Validate `.revet.toml` without running analysis |
+| [`revet report`](report) | Generate a self-contained HTML quality report |
 
 All commands accept `--help` for usage details:
 
