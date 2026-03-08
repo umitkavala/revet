@@ -29,6 +29,10 @@ inputs:
     description: 'Upload SARIF results to GitHub Code Scanning'
     required: false
     default: 'true'
+  gate:
+    description: 'Per-severity count limits, e.g. "error:0,warning:10". Overrides fail-on when set.'
+    required: false
+    default: ''
   format:
     description: 'Annotation format: "github", "json", or "none"'
     required: false
@@ -148,6 +152,11 @@ runs:
         # Modules
         if [ -n "${{ inputs.modules }}" ]; then
           FLAGS="$FLAGS --module ${{ inputs.modules }}"
+        fi
+
+        # Gate
+        if [ -n "${{ inputs.gate }}" ]; then
+          FLAGS="$FLAGS --gate ${{ inputs.gate }}"
         fi
 
         echo "REVET_FLAGS=$FLAGS" >> "$GITHUB_ENV"
