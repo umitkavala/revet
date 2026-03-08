@@ -15,6 +15,11 @@ function HomepageHeader() {
           {siteConfig.title}
         </Heading>
         <p className="hero__subtitle">{siteConfig.tagline}</p>
+        <div style={{marginBottom: '1.5rem'}}>
+          <a href="https://crates.io/crates/revet">
+            <img src="https://img.shields.io/crates/v/revet.svg" alt="crates.io version" />
+          </a>
+        </div>
         <div className={styles.buttons}>
           <Link className="button button--secondary button--lg" to="/docs/getting-started">
             Get Started →
