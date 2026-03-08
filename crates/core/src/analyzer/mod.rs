@@ -32,6 +32,17 @@ use crate::finding::{Finding, FixKind, Severity};
 use crate::graph::CodeGraph;
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+/// Per-analyzer timing record returned by `run_all_parallel_timed` and
+/// `run_graph_analyzers_timed`.
+#[derive(Debug, Clone)]
+pub struct AnalyzerTiming {
+    pub name: String,
+    pub prefix: String,
+    pub duration: Duration,
+    pub findings: usize,
+}
 
 /// Trait for domain-specific analyzers
 ///
@@ -133,14 +144,26 @@ impl AnalyzerDispatcher {
     /// Finding IDs are renumbered per-prefix to ensure sequential ordering
     /// (e.g., DEAD-001, DEAD-002, ...).
     pub fn run_graph_analyzers(&self, graph: &CodeGraph, config: &RevetConfig) -> Vec<Finding> {
+        self.run_graph_analyzers_timed(graph, config).0
+    }
+
+    /// Like `run_graph_analyzers` but also returns per-analyzer timing.
+    pub fn run_graph_analyzers_timed(
+        &self,
+        graph: &CodeGraph,
+        config: &RevetConfig,
+    ) -> (Vec<Finding>, Vec<AnalyzerTiming>) {
         let mut all_findings = Vec::new();
+        let mut timings = Vec::new();
 
         for analyzer in &self.graph_analyzers {
             if !analyzer.is_enabled(config) {
                 continue;
             }
 
+            let t = Instant::now();
             let mut findings = analyzer.analyze_graph(graph, config);
+            let elapsed = t.elapsed();
             let prefix = analyzer.finding_prefix();
 
             for (i, finding) in findings.iter_mut().enumerate() {
@@ -152,10 +175,16 @@ impl AnalyzerDispatcher {
                 .filter(|f| !config.ignore.findings.contains(&f.id))
                 .collect();
 
+            timings.push(AnalyzerTiming {
+                name: analyzer.name().to_string(),
+                prefix: prefix.to_string(),
+                duration: elapsed,
+                findings: findings.len(),
+            });
             all_findings.extend(findings);
         }
 
-        all_findings
+        (all_findings, timings)
     }
 
     /// Collect extra file extensions needed by enabled analyzers.
@@ -232,6 +261,16 @@ impl AnalyzerDispatcher {
         repo_root: &Path,
         config: &RevetConfig,
     ) -> Vec<Finding> {
+        self.run_all_parallel_timed(files, repo_root, config).0
+    }
+
+    /// Like `run_all_parallel` but also returns per-analyzer timing.
+    pub fn run_all_parallel_timed(
+        &self,
+        files: &[PathBuf],
+        repo_root: &Path,
+        config: &RevetConfig,
+    ) -> (Vec<Finding>, Vec<AnalyzerTiming>) {
         // Collect enabled analyzers
         let enabled: Vec<&dyn Analyzer> = self
             .analyzers
@@ -240,18 +279,26 @@ impl AnalyzerDispatcher {
             .map(|a| &**a)
             .collect();
 
-        // Run all analyzers in parallel
-        let per_analyzer: Vec<(String, Vec<Finding>)> = enabled
+        // Run all analyzers in parallel, capturing timing per analyzer
+        let per_analyzer: Vec<(String, String, Vec<Finding>, Duration)> = enabled
             .par_iter()
             .map(|analyzer| {
+                let t = Instant::now();
                 let findings = analyzer.analyze_files(files, repo_root);
-                (analyzer.finding_prefix().to_string(), findings)
+                let elapsed = t.elapsed();
+                (
+                    analyzer.name().to_string(),
+                    analyzer.finding_prefix().to_string(),
+                    findings,
+                    elapsed,
+                )
             })
             .collect();
 
-        // Sequential post-processing: renumber and filter
+        // Sequential post-processing: renumber, filter, collect timings
         let mut all_findings = Vec::new();
-        for (prefix, mut findings) in per_analyzer {
+        let mut timings = Vec::new();
+        for (name, prefix, mut findings, duration) in per_analyzer {
             for (i, finding) in findings.iter_mut().enumerate() {
                 finding.id = format!("{}-{:03}", prefix, i + 1);
             }
@@ -259,10 +306,16 @@ impl AnalyzerDispatcher {
                 .into_iter()
                 .filter(|f| !config.ignore.findings.contains(&f.id))
                 .collect();
+            timings.push(AnalyzerTiming {
+                name,
+                prefix,
+                duration,
+                findings: findings.len(),
+            });
             all_findings.extend(findings);
         }
 
-        all_findings
+        (all_findings, timings)
     }
 }
 

@@ -5,9 +5,9 @@ use colored::Colorize;
 use revet_core::{
     apply_fixes, create_store, discover_files, discover_files_extended, filter_findings,
     filter_findings_by_diff, filter_findings_by_inline, filter_findings_by_path_rules,
-    reconstruct_graph, AnalyzerDispatcher, Baseline, CodeGraph, DiffAnalyzer, FileGraphCache,
-    Finding, GateConfig, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore, ImpactAnalysis,
-    ParserDispatcher, RevetConfig, ReviewSummary, Severity, SuppressedFinding,
+    reconstruct_graph, AnalyzerDispatcher, AnalyzerTiming, Baseline, CodeGraph, DiffAnalyzer,
+    FileGraphCache, Finding, GateConfig, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore,
+    ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary, Severity, SuppressedFinding,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -182,7 +182,8 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     // ── 4b. Domain Analyzers ─────────────────────────────────────
     let step = Step::new("Running domain analyzers");
     let analyzer_start = Instant::now();
-    let analyzer_findings = analyzer_dispatcher.run_all_parallel(&files, &repo_path, &config);
+    let (analyzer_findings, domain_timings) =
+        analyzer_dispatcher.run_all_parallel_timed(&files, &repo_path, &config);
     let analyzer_count = analyzer_findings.len();
     findings.extend(analyzer_findings);
     step.finish(&format!(
@@ -194,7 +195,8 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     // ── 4b'. Graph analyzers ─────────────────────────────────────────
     let step = Step::new("Running graph analyzers");
     let ga_start = Instant::now();
-    let graph_findings = analyzer_dispatcher.run_graph_analyzers(&graph, &config);
+    let (graph_findings, graph_timings) =
+        analyzer_dispatcher.run_graph_analyzers_timed(&graph, &config);
     let graph_count = graph_findings.len();
     findings.extend(graph_findings);
     step.finish(&format!(
@@ -335,6 +337,11 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         if run_log_saved { Some(&run_id) } else { None },
     );
     out.finalize();
+
+    // ── 7. Timings (optional) ────────────────────────────────────
+    if cli.timings {
+        print_timings(&domain_timings, &graph_timings);
+    }
 
     // Quality gate (--gate) takes precedence over --fail-on
     let gate = cli
@@ -601,4 +608,57 @@ fn post_github_comments(findings: &[Finding], repo_path: &Path, cli: &crate::Cli
             step.warn(format!("failed: {}", e));
         }
     }
+}
+
+/// Print a per-analyzer timing breakdown table to stderr.
+fn print_timings(domain: &[AnalyzerTiming], graph: &[AnalyzerTiming]) {
+    let all: Vec<&AnalyzerTiming> = domain.iter().chain(graph.iter()).collect();
+    if all.is_empty() {
+        return;
+    }
+
+    eprintln!();
+    eprintln!("  {}", "Analyzer timings".bold());
+    eprintln!(
+        "  {:<30} {:>8}  {:>8}  {}",
+        "Analyzer".dimmed(),
+        "Time".dimmed(),
+        "Findings".dimmed(),
+        "Bar".dimmed()
+    );
+    eprintln!("  {}", "─".repeat(60).dimmed());
+
+    let max_ms = all
+        .iter()
+        .map(|t| t.duration.as_millis())
+        .max()
+        .unwrap_or(1)
+        .max(1);
+
+    for t in &all {
+        let ms = t.duration.as_millis();
+        let bar_len = ((ms as f64 / max_ms as f64) * 20.0).round() as usize;
+        let bar = format!("{}{}", "█".repeat(bar_len), "░".repeat(20 - bar_len));
+        let time_str = if ms < 1 {
+            format!("{:.2}ms", t.duration.as_secs_f64() * 1000.0)
+        } else {
+            format!("{:.0}ms", ms)
+        };
+        eprintln!(
+            "  {:<30} {:>8}  {:>8}  {}",
+            t.name,
+            time_str.yellow(),
+            t.findings,
+            bar.dimmed()
+        );
+    }
+
+    let total_ms: u128 = all.iter().map(|t| t.duration.as_millis()).sum();
+    eprintln!("  {}", "─".repeat(60).dimmed());
+    eprintln!(
+        "  {:<30} {:>8}",
+        "Total".bold(),
+        format!("{:.0}ms", total_ms).yellow().bold()
+    );
+    eprintln!();
 }

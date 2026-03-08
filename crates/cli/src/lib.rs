@@ -68,6 +68,10 @@ pub struct Cli {
     /// Max cost for LLM calls in USD
     #[arg(long, global = true)]
     pub max_cost: Option<f64>,
+
+    /// Print per-analyzer timing breakdown after analysis
+    #[arg(long, global = true)]
+    pub timings: bool,
 }
 
 #[derive(Subcommand)]
