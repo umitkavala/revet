@@ -170,6 +170,7 @@ impl PythonParser {
             },
         );
         func_node.set_end_line(node.end_position().row + 1);
+        func_node.set_is_public(!name.starts_with('_'));
 
         let node_id = graph.add_node(func_node);
         function_nodes.insert(name.clone(), node_id);
@@ -258,7 +259,7 @@ impl PythonParser {
 
         let mut class_node = Node::new(
             NodeKind::Class,
-            name,
+            name.clone(),
             file_path.to_path_buf(),
             node.start_position().row + 1,
             NodeData::Class {
@@ -268,6 +269,7 @@ impl PythonParser {
             },
         );
         class_node.set_end_line(node.end_position().row + 1);
+        class_node.set_is_public(!name.starts_with('_'));
 
         Some(graph.add_node(class_node))
     }

@@ -7,6 +7,7 @@ use crate::analyzer::GraphAnalyzer;
 use crate::config::RevetConfig;
 use crate::finding::{Finding, Severity};
 use crate::graph::{CodeGraph, EdgeKind, NodeId, NodeKind};
+use std::path::Path;
 
 /// Names commonly used as entry points — never flagged as unused.
 const ENTRY_POINT_NAMES: &[&str] = &[
@@ -25,6 +26,25 @@ impl UnusedExportsAnalyzer {
     pub fn new() -> Self {
         Self
     }
+}
+
+/// Returns true if the file path looks like a test file (excluded from dead-code requirements).
+fn is_test_file(path: &Path) -> bool {
+    path.components()
+        .any(|c| c.as_os_str() == "tests" || c.as_os_str() == "__tests__")
+        || path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|name| {
+                name.ends_with("_test.rs")
+                    || name.starts_with("test_")
+                    || name.ends_with("_test.py")
+                    || name.ends_with(".test.ts")
+                    || name.ends_with(".spec.ts")
+                    || name.ends_with(".test.js")
+                    || name.ends_with(".spec.js")
+            })
+            .unwrap_or(false)
 }
 
 /// Returns true if `node_id` has a `Contains` edge incoming from a `File` node.
@@ -72,6 +92,10 @@ impl GraphAnalyzer for UnusedExportsAnalyzer {
                 continue;
             }
 
+            if is_test_file(node.file_path()) {
+                continue;
+            }
+
             if !is_top_level(graph, node_id) {
                 continue;
             }
@@ -80,19 +104,35 @@ impl GraphAnalyzer for UnusedExportsAnalyzer {
                 continue;
             }
 
+            let (severity, message) = if node.is_public() {
+                (
+                    Severity::Warning,
+                    format!(
+                        "Exported `{}` ({:?}) has no callers or references",
+                        node.name(),
+                        kind
+                    ),
+                )
+            } else {
+                (
+                    Severity::Info,
+                    format!(
+                        "Private `{}` ({:?}) is unreachable — no callers in this codebase",
+                        node.name(),
+                        kind
+                    ),
+                )
+            };
+
             findings.push(Finding {
                 id: String::new(), // renumbered by dispatcher
-                severity: Severity::Warning,
-                message: format!(
-                    "Exported `{}` ({:?}) has no callers or references",
-                    node.name(),
-                    kind
-                ),
+                severity,
+                message,
                 file: node.file_path().clone(),
                 line: node.line(),
                 affected_dependents: 0,
                 suggestion: Some(
-                    "Remove this symbol or add an import/call to suppress this warning".to_string(),
+                    "Remove this symbol or add a call site to suppress this warning".to_string(),
                 ),
                 fix_kind: None,
                 ..Default::default()

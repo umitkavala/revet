@@ -24,6 +24,14 @@ pub struct Node {
     /// Additional data specific to the node kind
     data: NodeData,
 
+    /// Whether this symbol is publicly visible outside its module.
+    /// Defaults to `true` for parsers that don't track visibility (conservative:
+    /// avoids false-silencing dead-code findings on unknown-visibility symbols).
+    /// NOTE: must be before `decorators`/`type_parameters` so msgpack array
+    /// serialisation (positional) stays consistent when those fields are omitted.
+    #[serde(default = "default_true")]
+    is_public: bool,
+
     /// Decorators/annotations applied to this entity
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     decorators: Vec<String>,
@@ -48,6 +56,7 @@ impl Node {
             line,
             end_line: None,
             data,
+            is_public: true,
             decorators: Vec::new(),
             type_parameters: Vec::new(),
         }
@@ -104,6 +113,20 @@ impl Node {
     pub fn set_type_parameters(&mut self, type_parameters: Vec<String>) {
         self.type_parameters = type_parameters;
     }
+
+    /// Whether this symbol is publicly visible outside its module
+    pub fn is_public(&self) -> bool {
+        self.is_public
+    }
+
+    /// Set the public visibility of this symbol
+    pub fn set_is_public(&mut self, is_public: bool) {
+        self.is_public = is_public;
+    }
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// The kind of code entity a node represents

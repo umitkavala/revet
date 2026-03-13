@@ -5,9 +5,10 @@ use colored::Colorize;
 use revet_core::{
     apply_fixes, create_store, discover_files, discover_files_extended, filter_findings,
     filter_findings_by_diff, filter_findings_by_inline, filter_findings_by_path_rules,
-    reconstruct_graph, AnalyzerDispatcher, AnalyzerTiming, Baseline, CodeGraph, DiffAnalyzer,
-    FileGraphCache, Finding, GateConfig, GitTreeReader, GraphCache, GraphCacheMeta, GraphStore,
-    ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary, Severity, SuppressedFinding,
+    reconstruct_graph, AnalyzerDispatcher, AnalyzerTiming, Baseline, BlastRadiusSummary, CodeGraph,
+    DiffAnalyzer, FileGraphCache, Finding, GateConfig, GitTreeReader, GraphCache, GraphCacheMeta,
+    GraphStore, ImpactAnalysis, ParserDispatcher, RevetConfig, ReviewSummary, Severity,
+    SuppressedFinding,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
@@ -88,6 +89,7 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
     // ── 4. Impact Analysis ───────────────────────────────────────
     let mut findings: Vec<Finding> = Vec::new();
+    let mut blast_radius: Option<BlastRadiusSummary> = None;
 
     let old_graph = load_old_graph(&repo_path, cli, &config, &dispatcher);
 
@@ -97,6 +99,13 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
 
         let analysis = ImpactAnalysis::new(baseline, graph.clone());
         let report = analysis.analyze_impact();
+
+        // Compute blast radius summary for at-a-glance output
+        blast_radius = Some(BlastRadiusSummary::from_impact_report(
+            &report,
+            analysis.new_graph(),
+            &repo_path,
+        ));
 
         for change in &report.changes {
             let severity = match change.classification {
@@ -322,6 +331,9 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
     .is_ok();
 
     let mut out = make_formatter(format, &repo_path, cli.show_suppressed);
+    if let Some(ref br) = blast_radius {
+        out.write_blast_radius(br);
+    }
     for f in &findings {
         out.write_finding(f, &repo_path);
     }

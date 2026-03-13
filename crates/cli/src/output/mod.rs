@@ -13,7 +13,7 @@ pub mod json;
 pub mod sarif;
 pub mod terminal;
 
-use revet_core::{Finding, ReviewSummary, SuppressedFinding};
+use revet_core::{BlastRadiusSummary, Finding, ReviewSummary, SuppressedFinding};
 use std::path::Path;
 use std::time::Duration;
 
@@ -50,6 +50,11 @@ pub fn resolve_format(cli: &Cli, config: &RevetConfig) -> Format {
 // ── Trait ─────────────────────────────────────────────────────────────────────
 
 pub trait OutputFormatter {
+    /// Write the PR blast radius summary before any findings.
+    /// Only called in diff mode when symbol changes are detected.
+    /// Default: no-op (keeps existing formatters working without changes).
+    fn write_blast_radius(&mut self, _summary: &BlastRadiusSummary) {}
+
     /// Write one active finding.
     fn write_finding(&mut self, finding: &Finding, repo_path: &Path);
 

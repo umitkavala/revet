@@ -8,6 +8,17 @@ use std::collections::HashMap;
 use std::path::Path;
 use tree_sitter::{Parser, Tree, TreeCursor};
 
+/// Returns true if the tree-sitter node has a `pub` visibility modifier.
+fn is_rust_public(node: &tree_sitter::Node, source: &str) -> bool {
+    if let Some(vis) = node.child_by_field_name("visibility_modifier") {
+        vis.utf8_text(source.as_bytes())
+            .map(|t| t.starts_with("pub"))
+            .unwrap_or(false)
+    } else {
+        false
+    }
+}
+
 /// Rust language parser
 pub struct RustParser {
     language: tree_sitter::Language,
@@ -269,6 +280,7 @@ impl RustParser {
             },
         );
         func_node.set_end_line(node.end_position().row + 1);
+        func_node.set_is_public(is_rust_public(node, source));
 
         let node_id = graph.add_node(func_node);
         Some((node_id, name))
@@ -298,6 +310,7 @@ impl RustParser {
             },
         );
         struct_node.set_end_line(node.end_position().row + 1);
+        struct_node.set_is_public(is_rust_public(node, source));
 
         let node_id = graph.add_node(struct_node);
         Some((node_id, name))
@@ -367,6 +380,7 @@ impl RustParser {
             },
         );
         enum_node.set_end_line(node.end_position().row + 1);
+        enum_node.set_is_public(is_rust_public(node, source));
 
         let node_id = graph.add_node(enum_node);
         Some((node_id, name))
@@ -388,8 +402,6 @@ impl RustParser {
         if let Some(body) = node.child_by_field_name("body") {
             let mut cursor = body.walk();
             for child in body.children(&mut cursor) {
-                // function_signature_item = trait method without body
-                // function_item = trait method with default implementation
                 if child.kind() == "function_signature_item" || child.kind() == "function_item" {
                     if let Some(mname) = child.child_by_field_name("name") {
                         if let Ok(method_name) = mname.utf8_text(source.as_bytes()) {
@@ -408,6 +420,7 @@ impl RustParser {
             NodeData::Interface { methods },
         );
         trait_node.set_end_line(node.end_position().row + 1);
+        trait_node.set_is_public(is_rust_public(node, source));
 
         let node_id = graph.add_node(trait_node);
         Some((node_id, name))
@@ -602,7 +615,7 @@ impl RustParser {
             .and_then(|t| t.utf8_text(source.as_bytes()).ok())
             .map(|s| s.to_string());
 
-        let var_node = Node::new(
+        let mut var_node = Node::new(
             NodeKind::Variable,
             name,
             file_path.to_path_buf(),
@@ -612,6 +625,7 @@ impl RustParser {
                 is_constant,
             },
         );
+        var_node.set_is_public(is_rust_public(node, source));
 
         Some(graph.add_node(var_node))
     }
@@ -632,13 +646,14 @@ impl RustParser {
             .unwrap_or("")
             .to_string();
 
-        let type_node = Node::new(
+        let mut type_node = Node::new(
             NodeKind::Type,
             name.clone(),
             file_path.to_path_buf(),
             node.start_position().row + 1,
             NodeData::Type { definition },
         );
+        type_node.set_is_public(is_rust_public(node, source));
 
         let node_id = graph.add_node(type_node);
         Some((node_id, name))

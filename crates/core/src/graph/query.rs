@@ -22,8 +22,6 @@ impl<'a> GraphQuery<'a> {
             .collect()
     }
 
-    /// Find all nodes that transitively depend on the given node
-    /// (i.e., all nodes reachable by following reverse edges)
     pub fn transitive_dependents(&self, node: NodeId, max_depth: Option<usize>) -> Vec<NodeId> {
         let mut result = Vec::new();
         let mut visited = HashSet::new();
@@ -43,6 +41,38 @@ impl<'a> GraphQuery<'a> {
                 if visited.insert(dependent) {
                     result.push(dependent);
                     queue.push_back((dependent, depth + 1));
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Find all nodes that transitively call the given node (via `Calls` edges only).
+    pub fn transitive_callers(&self, node: NodeId, max_depth: Option<usize>) -> Vec<NodeId> {
+        let mut result = Vec::new();
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
+
+        queue.push_back((node, 0));
+        visited.insert(node);
+
+        while let Some((current, depth)) = queue.pop_front() {
+            if let Some(max) = max_depth {
+                if depth >= max {
+                    continue;
+                }
+            }
+
+            for (caller, _) in self
+                .graph
+                .edges_to(current)
+                .into_iter()
+                .filter(|(_, e)| e.kind() == &EdgeKind::Calls)
+            {
+                if visited.insert(caller) {
+                    result.push(caller);
+                    queue.push_back((caller, depth + 1));
                 }
             }
         }

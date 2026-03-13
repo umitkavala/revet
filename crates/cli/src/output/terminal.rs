@@ -9,7 +9,9 @@
 //! ```
 
 use colored::Colorize;
-use revet_core::{Finding, ReviewSummary, Severity, SuppressedFinding};
+use revet_core::{
+    BlastRadiusSummary, Finding, ReviewSummary, RiskLevel, Severity, SuppressedFinding,
+};
 use std::path::Path;
 use std::time::Duration;
 
@@ -40,6 +42,47 @@ impl Default for TerminalFormatter {
 // ── OutputFormatter impl ─────────────────────────────────────────────────────
 
 impl OutputFormatter for TerminalFormatter {
+    fn write_blast_radius(&mut self, summary: &BlastRadiusSummary) {
+        if summary.directly_modified == 0 {
+            return;
+        }
+        let line = "\u{2500}".repeat(60);
+        println!("  {}", "PR Blast Radius".bold());
+        println!("  {}", line.dimmed());
+        println!(
+            "  {:<32} {}",
+            "Directly modified symbols:".dimmed(),
+            summary.directly_modified
+        );
+        let cross = if summary.cross_module_crossings > 0 {
+            format!(
+                "  (across {} module {})",
+                summary.cross_module_crossings,
+                if summary.cross_module_crossings == 1 {
+                    "boundary"
+                } else {
+                    "boundaries"
+                }
+            )
+        } else {
+            String::new()
+        };
+        println!(
+            "  {:<32} {}{}",
+            "Transitively affected callers:".dimmed(),
+            summary.transitively_affected,
+            cross.dimmed()
+        );
+        let risk_str = match summary.risk {
+            RiskLevel::Low => "LOW".green().bold().to_string(),
+            RiskLevel::Medium => "MEDIUM".yellow().bold().to_string(),
+            RiskLevel::High => "HIGH".red().bold().to_string(),
+        };
+        println!("  {:<32} {}", "Risk:".dimmed(), risk_str);
+        println!("  {}", line.dimmed());
+        println!();
+    }
+
     fn write_finding(&mut self, finding: &Finding, repo_path: &Path) {
         if self.printed > 0 {
             println!();

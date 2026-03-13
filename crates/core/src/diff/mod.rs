@@ -1,8 +1,10 @@
 //! Git diff analysis and cross-file impact detection
 
+pub mod blast_radius;
 pub mod blob;
 pub mod impact;
 
+pub use blast_radius::{BlastRadiusSummary, RiskLevel};
 pub use blob::GitTreeReader;
 pub use impact::{ChangeClassification, ChangeImpact, ImpactAnalysis, ImpactReport, ImpactSummary};
 

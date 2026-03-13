@@ -26,8 +26,8 @@ pub use baseline::{filter_findings, Baseline, BaselineEntry};
 pub use cache::{FileGraphCache, GraphCache, GraphCacheMeta};
 pub use config::{GateConfig, RevetConfig};
 pub use diff::{
-    filter_findings_by_diff, ChangeClassification, ChangeImpact, DiffAnalyzer, DiffFileLines,
-    DiffLineMap, GitTreeReader, ImpactAnalysis, ImpactSummary,
+    filter_findings_by_diff, BlastRadiusSummary, ChangeClassification, ChangeImpact, DiffAnalyzer,
+    DiffFileLines, DiffLineMap, GitTreeReader, ImpactAnalysis, ImpactSummary, RiskLevel,
 };
 pub use discovery::{discover_files, discover_files_extended};
 pub use finding::{Finding, FixKind, ReviewSummary, Severity};

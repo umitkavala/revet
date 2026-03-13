@@ -5,7 +5,7 @@
 //!
 //! See: <https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions>
 
-use revet_core::{Finding, ReviewSummary, Severity, SuppressedFinding};
+use revet_core::{BlastRadiusSummary, Finding, ReviewSummary, Severity, SuppressedFinding};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -22,6 +22,18 @@ impl GithubFormatter {
 }
 
 impl OutputFormatter for GithubFormatter {
+    fn write_blast_radius(&mut self, summary: &BlastRadiusSummary) {
+        // Emit a GitHub Actions notice annotation with the blast radius summary
+        println!(
+            "::notice title=PR Blast Radius::Risk: {} | {} symbol(s) modified | {} caller(s) affected | {} module {}",
+            summary.risk,
+            summary.directly_modified,
+            summary.transitively_affected,
+            summary.cross_module_crossings,
+            if summary.cross_module_crossings == 1 { "boundary crossed" } else { "boundaries crossed" },
+        );
+    }
+
     fn write_finding(&mut self, finding: &Finding, _repo_path: &Path) {
         println!("{}", format_finding(finding, &self.repo_path));
     }

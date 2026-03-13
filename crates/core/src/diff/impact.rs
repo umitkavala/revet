@@ -1,6 +1,6 @@
 //! Cross-file impact analysis
 
-use crate::graph::{CodeGraph, NodeId};
+use crate::graph::{CodeGraph, EdgeKind, NodeId};
 use serde::{Deserialize, Serialize};
 
 /// Classifies the type and severity of a code change
@@ -76,7 +76,6 @@ impl ImpactAnalysis {
             || old_node.type_parameters() != new_node.type_parameters()
     }
 
-    /// Analyze the impact of changes
     pub fn analyze_impact(&self) -> ImpactReport {
         let mut report = ImpactReport::new();
         let changed_nodes = self.find_changed_nodes();
@@ -84,14 +83,17 @@ impl ImpactAnalysis {
         for (new_node_id, old_node_id) in changed_nodes {
             let classification = self.classify_change(new_node_id, old_node_id);
 
-            // Find direct dependents in the NEW graph
-            let direct_deps = self.new_graph.query().direct_dependents(new_node_id);
+            // Direct callers: only nodes that call this symbol via Calls edges
+            let direct_deps = self
+                .new_graph
+                .query()
+                .find_by_edge_kind_reverse(new_node_id, EdgeKind::Calls);
 
-            // Find transitive dependents (up to depth 3) in the NEW graph
+            // Transitive callers up to configurable depth (default 3)
             let transitive_deps = self
                 .new_graph
                 .query()
-                .transitive_dependents(new_node_id, Some(3));
+                .transitive_callers(new_node_id, Some(3));
 
             report.add_changed_node(new_node_id, classification, direct_deps, transitive_deps);
         }
