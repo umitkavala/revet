@@ -490,6 +490,42 @@ fn test_python_transitive_callers_cross_file() {
     );
 }
 
+/// TypeScript: `import { helper } from './utils'; helper()` — Calls edge across files.
+#[test]
+fn test_typescript_named_import_call_creates_calls_edge() {
+    let dir = TempDir::new().unwrap();
+    let utils = write(&dir, "utils.ts", "export function helper(): void {}\n");
+    let main = write(
+        &dir,
+        "main.ts",
+        "import { helper } from './utils';\n\nfunction run(): void {\n    helper();\n}\n",
+    );
+
+    let dispatcher = ParserDispatcher::new();
+    let (graph, errors) = dispatcher.parse_files_parallel(&[utils, main], dir.path().to_path_buf());
+    assert!(errors.is_empty(), "errors: {:?}", errors);
+
+    let run_id = graph
+        .nodes()
+        .find(|(_, n)| n.name() == "run" && matches!(n.kind(), NodeKind::Function))
+        .map(|(id, _)| id)
+        .expect("expected `run` function node");
+
+    let calls_targets: Vec<_> = graph
+        .edges_from(run_id)
+        .filter(|(_, e)| matches!(e.kind(), EdgeKind::Calls))
+        .map(|(target, _)| target)
+        .collect();
+
+    assert!(
+        !calls_targets.is_empty(),
+        "expected a Calls edge from `run` to `helper` across TypeScript files"
+    );
+    let callee = graph.node(calls_targets[0]).unwrap();
+    assert_eq!(callee.name(), "helper");
+    assert!(callee.file_path().ends_with("utils.ts"));
+}
+
 /// Rust: `use utils::helper; helper()` — cross-file Calls edge via use declaration.
 #[test]
 fn test_rust_use_import_call_creates_calls_edge() {

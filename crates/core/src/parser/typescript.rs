@@ -1,6 +1,9 @@
 //! TypeScript/JavaScript language parser using Tree-sitter
 
-use super::{collect_import_state, LanguageParser, ParseError, ParseState};
+use super::{
+    build_function_nodes_map, build_imports_map, collect_import_state, resolve_import_call,
+    LanguageParser, ParseError, ParseState, UnresolvedCall,
+};
 use crate::graph::{
     CodeGraph, Edge, EdgeKind, EdgeMetadata, Node, NodeData, NodeId, NodeKind, Parameter,
 };
@@ -9,6 +12,14 @@ use std::path::Path;
 use tree_sitter::{Parser, Tree, TreeCursor};
 
 // Tests live in crates/core/tests/test_typescript_parser.rs
+
+/// Immutable context threaded through the cross-file-call AST walker.
+struct TsXfCallCtx<'a> {
+    source: &'a str,
+    function_nodes: &'a HashMap<String, NodeId>,
+    imports_map: &'a HashMap<String, String>,
+    file_path: &'a Path,
+}
 
 /// TypeScript language parser (also handles JavaScript)
 pub struct TypeScriptParser {
@@ -1099,6 +1110,82 @@ impl TypeScriptParser {
         }
     }
 
+    /// Walk `tree` to find calls to imported names that weren't resolved locally.
+    fn collect_cross_file_calls(
+        &self,
+        tree: &Tree,
+        source: &str,
+        file_path: &Path,
+        function_nodes: &HashMap<String, NodeId>,
+        imports_map: &HashMap<String, String>,
+    ) -> Vec<UnresolvedCall> {
+        let root = tree.root_node();
+        let mut cursor = root.walk();
+        let mut result = Vec::new();
+        let ctx = TsXfCallCtx {
+            source,
+            function_nodes,
+            imports_map,
+            file_path,
+        };
+        self.collect_xf_calls_recursive(&mut cursor, &ctx, None, &mut result);
+        result
+    }
+
+    fn collect_xf_calls_recursive(
+        &self,
+        cursor: &mut TreeCursor,
+        ctx: &TsXfCallCtx<'_>,
+        current_function: Option<NodeId>,
+        out: &mut Vec<UnresolvedCall>,
+    ) {
+        let node = cursor.node();
+
+        let new_context = match node.kind() {
+            "function_declaration" => {
+                if let Some(name_node) = node.child_by_field_name("name") {
+                    if let Ok(name) = name_node.utf8_text(ctx.source.as_bytes()) {
+                        ctx.function_nodes.get(name).copied().or(current_function)
+                    } else {
+                        current_function
+                    }
+                } else {
+                    current_function
+                }
+            }
+            "arrow_function" | "function_expression" => current_function,
+            _ => current_function,
+        };
+
+        if node.kind() == "call_expression" {
+            if let (Some(caller), Some(callee_full)) =
+                (new_context, self.extract_call_target(&node, ctx.source))
+            {
+                if let Some((module, callee_name)) =
+                    resolve_import_call(&callee_full, ctx.imports_map, ctx.function_nodes)
+                {
+                    out.push(UnresolvedCall {
+                        caller_node_id: caller,
+                        callee_name,
+                        module_specifier: module,
+                        call_line: node.start_position().row + 1,
+                        importing_file: ctx.file_path.to_path_buf(),
+                    });
+                }
+            }
+        }
+
+        if cursor.goto_first_child() {
+            loop {
+                self.collect_xf_calls_recursive(cursor, ctx, new_context, out);
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+            cursor.goto_parent();
+        }
+    }
+
     /// Second pass: extract function calls to build the call graph
     fn extract_calls(
         &self,
@@ -1229,8 +1316,24 @@ impl LanguageParser for TypeScriptParser {
         file_path: &Path,
         graph: &mut CodeGraph,
     ) -> Result<(Vec<NodeId>, ParseState), ParseError> {
-        let ids = self.parse_file(file_path, graph)?;
-        let state = collect_import_state(graph, file_path);
+        let source = std::fs::read_to_string(file_path)?;
+        let tree = self.parse_tree(&source)?;
+        let ids = self.extract_nodes(&tree, &source, file_path, graph);
+
+        let mut state = collect_import_state(graph, file_path);
+
+        let imports_map = build_imports_map(&state);
+        if !imports_map.is_empty() {
+            let function_nodes = build_function_nodes_map(graph, file_path);
+            state.unresolved_calls = self.collect_cross_file_calls(
+                &tree,
+                &source,
+                file_path,
+                &function_nodes,
+                &imports_map,
+            );
+        }
+
         Ok((ids, state))
     }
 }
