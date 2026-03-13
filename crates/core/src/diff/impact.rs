@@ -18,6 +18,8 @@ pub enum ChangeClassification {
 pub struct ImpactAnalysis {
     old_graph: CodeGraph,
     new_graph: CodeGraph,
+    /// Maximum transitive call-graph depth (default: 3)
+    call_graph_depth: usize,
 }
 
 impl ImpactAnalysis {
@@ -26,7 +28,14 @@ impl ImpactAnalysis {
         Self {
             old_graph,
             new_graph,
+            call_graph_depth: 3,
         }
+    }
+
+    /// Set the maximum transitive call-graph traversal depth
+    pub fn with_depth(mut self, depth: usize) -> Self {
+        self.call_graph_depth = depth;
+        self
     }
 
     /// Find all changed nodes by comparing old and new graphs
@@ -89,11 +98,11 @@ impl ImpactAnalysis {
                 .query()
                 .find_by_edge_kind_reverse(new_node_id, EdgeKind::Calls);
 
-            // Transitive callers up to configurable depth (default 3)
+            // Transitive callers up to the configured depth
             let transitive_deps = self
                 .new_graph
                 .query()
-                .transitive_callers(new_node_id, Some(3));
+                .transitive_callers(new_node_id, Some(self.call_graph_depth));
 
             report.add_changed_node(new_node_id, classification, direct_deps, transitive_deps);
         }

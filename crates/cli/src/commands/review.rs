@@ -97,7 +97,8 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
         let step = Step::new("Running impact analysis");
         let impact_start = Instant::now();
 
-        let analysis = ImpactAnalysis::new(baseline, graph.clone());
+        let analysis = ImpactAnalysis::new(baseline, graph.clone())
+            .with_depth(config.modules.call_graph_depth);
         let report = analysis.analyze_impact();
 
         // Compute blast radius summary for at-a-glance output
@@ -129,23 +130,56 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
                 revet_core::ChangeClassification::Safe => unreachable!(),
             };
 
-            // Collect caller locations (direct dependents only, to avoid noise)
-            let callers: Vec<String> = change
-                .direct_dependents
-                .iter()
-                .filter_map(|&dep_id| analysis.new_graph().node(dep_id))
-                .map(|n| {
-                    let rel = n
+            // Collect caller locations using the call-site line from EdgeMetadata.
+            // Direct callers first (with precise call-site line), then transitives.
+            let mut callers: Vec<String> = Vec::new();
+
+            // Direct callers — use EdgeMetadata::Call { line } for call-site precision
+            for (caller_id, edge) in analysis
+                .new_graph()
+                .edges_to(change.node_id)
+                .into_iter()
+                .filter(|(_, e)| e.kind() == &revet_core::EdgeKind::Calls)
+            {
+                if let Some(caller_node) = analysis.new_graph().node(caller_id) {
+                    let rel = caller_node
                         .file_path()
                         .strip_prefix(&repo_path)
-                        .unwrap_or(n.file_path());
-                    if n.line() > 0 {
-                        format!("{}:{}", rel.display(), n.line())
+                        .unwrap_or(caller_node.file_path());
+                    let call_line = match edge.metadata() {
+                        Some(revet_core::EdgeMetadata::Call { line, .. }) => *line,
+                        _ => caller_node.line(),
+                    };
+                    callers.push(if call_line > 0 {
+                        format!("{}:{}", rel.display(), call_line)
                     } else {
                         rel.display().to_string()
-                    }
-                })
-                .collect();
+                    });
+                }
+            }
+
+            // Transitive callers (beyond the direct set) — annotated as transitive
+            let direct_set: std::collections::HashSet<_> =
+                change.direct_dependents.iter().copied().collect();
+            for &t_id in &change.transitive_dependents {
+                if direct_set.contains(&t_id) {
+                    continue; // already listed above
+                }
+                if let Some(t_node) = analysis.new_graph().node(t_id) {
+                    let rel = t_node
+                        .file_path()
+                        .strip_prefix(&repo_path)
+                        .unwrap_or(t_node.file_path());
+                    callers.push(format!(
+                        "{} (transitive)",
+                        if t_node.line() > 0 {
+                            format!("{}:{}", rel.display(), t_node.line())
+                        } else {
+                            rel.display().to_string()
+                        }
+                    ));
+                }
+            }
 
             findings.push(Finding {
                 id: format!("{}-{:03}", id_prefix, findings.len() + 1),
@@ -171,6 +205,178 @@ pub fn run(path: Option<&Path>, cli: &crate::Cli) -> Result<ReviewExitCode> {
             findings.len(),
             impact_start.elapsed().as_secs_f64()
         ));
+
+        // ── 4b. Diff-scoped dead code (rvt-59) ───────────────────
+        if config.modules.dead_code {
+            // Symbols added in this diff that have zero callers in the full repo
+            let new_node_names: std::collections::HashSet<(&str, &std::path::Path)> = analysis
+                .new_graph()
+                .nodes()
+                .map(|(_, n)| (n.name(), n.file_path().as_path()))
+                .collect();
+
+            for (node_id, node) in analysis.new_graph().nodes() {
+                if !matches!(
+                    node.kind(),
+                    revet_core::NodeKind::Function
+                        | revet_core::NodeKind::Class
+                        | revet_core::NodeKind::Variable
+                ) {
+                    continue;
+                }
+                if diff_dead_is_entry_point(node.name()) {
+                    continue;
+                }
+                if diff_is_test_file(node.file_path()) {
+                    continue;
+                }
+                // Only flag symbols that are NEW (not in old graph)
+                let in_old = analysis.old_graph().nodes().any(|(_, on)| {
+                    on.name() == node.name()
+                        && on.file_path() == node.file_path()
+                        && on.kind() == node.kind()
+                });
+                if in_old {
+                    continue;
+                }
+                // Check for callers in the new graph
+                let has_callers = analysis.new_graph().edges_to(node_id).iter().any(|(_, e)| {
+                    matches!(
+                        e.kind(),
+                        revet_core::EdgeKind::Calls | revet_core::EdgeKind::References
+                    )
+                });
+                if has_callers {
+                    continue;
+                }
+                let severity = if node.is_public() {
+                    Severity::Warning
+                } else {
+                    Severity::Info
+                };
+                findings.push(Finding {
+                    id: String::new(),
+                    severity,
+                    message: format!(
+                        "`{}` added in this diff but has no callers in the codebase",
+                        node.name()
+                    ),
+                    file: node.file_path().clone(),
+                    line: node.line(),
+                    affected_dependents: 0,
+                    suggestion: Some("Add a call site or remove the symbol".to_string()),
+                    fix_kind: None,
+                    ..Default::default()
+                });
+            }
+            let _ = new_node_names; // suppress unused warning
+
+            // ── 4c. Deletion orphan check (rvt-60) ────────────────
+            for (_, old_node) in analysis.old_graph().nodes() {
+                if !matches!(
+                    old_node.kind(),
+                    revet_core::NodeKind::Function
+                        | revet_core::NodeKind::Class
+                        | revet_core::NodeKind::Variable
+                ) {
+                    continue;
+                }
+                if diff_is_test_file(old_node.file_path()) {
+                    continue;
+                }
+                // Only examine deleted symbols (absent in new graph)
+                let still_exists = analysis.new_graph().nodes().any(|(_, nn)| {
+                    nn.name() == old_node.name()
+                        && nn.file_path() == old_node.file_path()
+                        && nn.kind() == old_node.kind()
+                });
+                if still_exists {
+                    continue;
+                }
+
+                // Find what this deleted node was calling/referencing in the old graph
+                // If the deletion removes the only reference to another symbol S,
+                // emit a dead-code finding on S in the new graph.
+                for (old_caller_id, _) in analysis.old_graph().nodes() {
+                    if analysis.old_graph().node(old_caller_id).map(|n| n.name())
+                        != Some(old_node.name())
+                    {
+                        continue;
+                    }
+                    for (target_id, edge) in analysis.old_graph().edges_from(old_caller_id) {
+                        if !matches!(
+                            edge.kind(),
+                            revet_core::EdgeKind::Calls | revet_core::EdgeKind::References
+                        ) {
+                            continue;
+                        }
+                        let target_node = match analysis.old_graph().node(target_id) {
+                            Some(n) => n,
+                            None => continue,
+                        };
+                        if diff_is_test_file(target_node.file_path()) {
+                            continue;
+                        }
+                        // Find the same target in the new graph
+                        let new_target = analysis.new_graph().nodes().find(|(_, nn)| {
+                            nn.name() == target_node.name()
+                                && nn.file_path() == target_node.file_path()
+                                && nn.kind() == target_node.kind()
+                        });
+                        let (new_target_id, new_target_node) = match new_target {
+                            Some(t) => t,
+                            None => continue, // also deleted
+                        };
+                        // Check if now has zero callers in new graph
+                        let still_has_callers = analysis
+                            .new_graph()
+                            .edges_to(new_target_id)
+                            .iter()
+                            .any(|(_, e)| {
+                                matches!(
+                                    e.kind(),
+                                    revet_core::EdgeKind::Calls | revet_core::EdgeKind::References
+                                )
+                            });
+                        if still_has_callers {
+                            continue;
+                        }
+                        if diff_dead_is_entry_point(new_target_node.name()) {
+                            continue;
+                        }
+                        let severity = if new_target_node.is_public() {
+                            Severity::Warning
+                        } else {
+                            Severity::Info
+                        };
+                        let rel = new_target_node
+                            .file_path()
+                            .strip_prefix(&repo_path)
+                            .unwrap_or(new_target_node.file_path());
+                        findings.push(Finding {
+                            id: String::new(),
+                            severity,
+                            message: format!(
+                                "`{}` is now unreachable — its only caller `{}` was removed in this diff",
+                                new_target_node.name(),
+                                old_node.name()
+                            ),
+                            file: new_target_node.file_path().clone(),
+                            line: new_target_node.line(),
+                            affected_dependents: 0,
+                            suggestion: Some(format!(
+                                "Remove `{}` or add a new call site at {}",
+                                new_target_node.name(),
+                                rel.display()
+                            )),
+                            fix_kind: None,
+                            ..Default::default()
+                        });
+                    }
+                    break; // matched the deleted node — no need to continue
+                }
+            }
+        }
     }
 
     // Add parse errors as findings
@@ -706,4 +912,31 @@ fn print_timings(domain: &[AnalyzerTiming], graph: &[AnalyzerTiming]) {
         format!("{:.0}ms", total_ms).yellow().bold()
     );
     eprintln!();
+}
+
+/// Entry-point names never flagged as dead code (diff-scoped checks).
+fn diff_dead_is_entry_point(name: &str) -> bool {
+    matches!(
+        name,
+        "main" | "__init__" | "__main__" | "new" | "index" | "handler" | "default"
+    )
+}
+
+/// Returns true if the path looks like a test file.
+fn diff_is_test_file(path: &std::path::Path) -> bool {
+    path.components()
+        .any(|c| c.as_os_str() == "tests" || c.as_os_str() == "__tests__")
+        || path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|name| {
+                name.ends_with("_test.rs")
+                    || name.starts_with("test_")
+                    || name.ends_with("_test.py")
+                    || name.ends_with(".test.ts")
+                    || name.ends_with(".spec.ts")
+                    || name.ends_with(".test.js")
+                    || name.ends_with(".spec.js")
+            })
+            .unwrap_or(false)
 }

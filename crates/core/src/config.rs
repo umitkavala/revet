@@ -203,6 +203,10 @@ pub struct ModulesConfig {
     #[serde(default = "default_duplication_min_lines")]
     pub duplication_min_lines: usize,
 
+    /// Maximum transitive call-graph depth for impact analysis (default: 3)
+    #[serde(default = "default_call_graph_depth")]
+    pub call_graph_depth: usize,
+
     /// Module-specific configurations
     #[serde(flatten)]
     pub module_configs: HashMap<String, toml::Value>,
@@ -291,6 +295,10 @@ fn default_duplication_min_lines() -> usize {
     6
 }
 
+fn default_call_graph_depth() -> usize {
+    3
+}
+
 fn default_true() -> bool {
     true
 }
@@ -369,6 +377,7 @@ impl Default for ModulesConfig {
             test_coverage: false,
             duplication: false,
             duplication_min_lines: default_duplication_min_lines(),
+            call_graph_depth: default_call_graph_depth(),
             module_configs: HashMap::new(),
         }
     }
