@@ -1,7 +1,8 @@
 //! Integration tests for graph-based analyzers (GraphAnalyzer trait)
 
 use revet_core::config::RevetConfig;
-use revet_core::graph::{CodeGraph, Edge, EdgeKind, Node, NodeData, NodeKind};
+use revet_core::finding::Severity;
+use revet_core::graph::{CodeGraph, Edge, EdgeKind, Node, NodeData, NodeId, NodeKind};
 use revet_core::AnalyzerDispatcher;
 use std::path::PathBuf;
 
@@ -227,5 +228,192 @@ fn test_cycles_disabled_no_findings() {
     assert!(
         cycle_findings.is_empty(),
         "No CYCLE findings when cycles=false"
+    );
+}
+
+// ── Diff-scoped dead code helpers (rvt-61) ────────────────────────────────────
+
+fn add_public_function(graph: &mut CodeGraph, name: &str, file: &str, line: usize) -> NodeId {
+    let mut node = Node::new(
+        NodeKind::Function,
+        name.to_string(),
+        PathBuf::from(file),
+        line,
+        NodeData::Function {
+            parameters: vec![],
+            return_type: None,
+        },
+    );
+    node.set_is_public(true);
+    graph.add_node(node)
+}
+
+fn add_private_function(graph: &mut CodeGraph, name: &str, file: &str, line: usize) -> NodeId {
+    let mut node = Node::new(
+        NodeKind::Function,
+        name.to_string(),
+        PathBuf::from(file),
+        line,
+        NodeData::Function {
+            parameters: vec![],
+            return_type: None,
+        },
+    );
+    node.set_is_public(false);
+    graph.add_node(node)
+}
+
+/// Scenario 1: A newly-added public function with no callers should produce a
+/// Warning-severity DEAD finding.
+#[test]
+fn test_new_public_symbol_no_callers_is_warning() {
+    let mut graph = CodeGraph::new(PathBuf::from("."));
+    let file_id = add_file_node(&mut graph, "src/new_feature.py");
+    let func_id = add_public_function(&mut graph, "shiny_new_func", "src/new_feature.py", 5);
+    graph.add_edge(file_id, func_id, Edge::new(EdgeKind::Contains));
+
+    let dispatcher = AnalyzerDispatcher::new();
+    let mut config = RevetConfig::default();
+    config.modules.dead_code = true;
+    let findings = dispatcher.run_graph_analyzers(&graph, &config);
+
+    let dead: Vec<_> = findings
+        .iter()
+        .filter(|f| f.id.starts_with("DEAD") && f.message.contains("shiny_new_func"))
+        .collect();
+
+    assert!(
+        !dead.is_empty(),
+        "Expected DEAD finding for unused public function"
+    );
+    assert_eq!(
+        dead[0].severity,
+        Severity::Warning,
+        "Public unused function should be Warning, got {:?}",
+        dead[0].severity
+    );
+}
+
+/// Scenario 2: A newly-added private function with no callers should produce an
+/// Info-severity DEAD finding.
+#[test]
+fn test_new_private_symbol_no_callers_is_info() {
+    let mut graph = CodeGraph::new(PathBuf::from("."));
+    let file_id = add_file_node(&mut graph, "src/new_feature.py");
+    // Private: name starts with _ (Python convention)
+    let func_id = add_private_function(&mut graph, "_internal_helper", "src/new_feature.py", 10);
+    graph.add_edge(file_id, func_id, Edge::new(EdgeKind::Contains));
+
+    let dispatcher = AnalyzerDispatcher::new();
+    let mut config = RevetConfig::default();
+    config.modules.dead_code = true;
+    let findings = dispatcher.run_graph_analyzers(&graph, &config);
+
+    let dead: Vec<_> = findings
+        .iter()
+        .filter(|f| f.id.starts_with("DEAD") && f.message.contains("_internal_helper"))
+        .collect();
+
+    assert!(
+        !dead.is_empty(),
+        "Expected DEAD finding for unused private function"
+    );
+    assert_eq!(
+        dead[0].severity,
+        Severity::Info,
+        "Private unused function should be Info, got {:?}",
+        dead[0].severity
+    );
+}
+
+/// Scenario 3: Functions in test files should not be flagged.
+#[test]
+fn test_function_in_test_file_not_flagged() {
+    let mut graph = CodeGraph::new(PathBuf::from("."));
+    // Various test file path patterns
+    for path in &[
+        "tests/test_utils.rs",
+        "src/test_helpers.py",
+        "src/__tests__/helpers.ts",
+        "src/utils.test.ts",
+    ] {
+        let file_id = add_file_node(&mut graph, path);
+        let func_id = add_public_function(&mut graph, "helper_fn", path, 1);
+        graph.add_edge(file_id, func_id, Edge::new(EdgeKind::Contains));
+    }
+
+    let dispatcher = AnalyzerDispatcher::new();
+    let mut config = RevetConfig::default();
+    config.modules.dead_code = true;
+    let findings = dispatcher.run_graph_analyzers(&graph, &config);
+
+    let dead: Vec<_> = findings
+        .iter()
+        .filter(|f| f.id.starts_with("DEAD"))
+        .collect();
+
+    assert!(
+        dead.is_empty(),
+        "Functions in test files should not produce DEAD findings, got: {:?}",
+        dead
+    );
+}
+
+/// Scenario 4: When a function gains a caller (simulating a diff where the symbol
+/// was already present and referenced), it should NOT be flagged.
+#[test]
+fn test_symbol_with_caller_not_flagged() {
+    let mut graph = CodeGraph::new(PathBuf::from("."));
+    let lib_file = add_file_node(&mut graph, "src/lib.py");
+    let func_id = add_public_function(&mut graph, "process", "src/lib.py", 1);
+    graph.add_edge(lib_file, func_id, Edge::new(EdgeKind::Contains));
+
+    // Add caller in another file
+    let main_file = add_file_node(&mut graph, "src/main.py");
+    let caller_id = add_public_function(&mut graph, "run", "src/main.py", 1);
+    graph.add_edge(main_file, caller_id, Edge::new(EdgeKind::Contains));
+    graph.add_edge(caller_id, func_id, Edge::new(EdgeKind::Calls));
+
+    let dispatcher = AnalyzerDispatcher::new();
+    let mut config = RevetConfig::default();
+    config.modules.dead_code = true;
+    let findings = dispatcher.run_graph_analyzers(&graph, &config);
+
+    let dead: Vec<_> = findings
+        .iter()
+        .filter(|f| f.id.starts_with("DEAD") && f.message.contains("process"))
+        .collect();
+
+    assert!(
+        dead.is_empty(),
+        "`process` has a caller — should not be flagged; got {:?}",
+        dead
+    );
+}
+
+/// Scenario 5: Entry-point names should never be flagged regardless of callers.
+#[test]
+fn test_common_entry_points_not_flagged() {
+    let mut graph = CodeGraph::new(PathBuf::from("."));
+    let file_id = add_file_node(&mut graph, "src/app.rs");
+    for ep in &["main", "__init__", "handler", "index", "new"] {
+        let func_id = add_public_function(&mut graph, ep, "src/app.rs", 1);
+        graph.add_edge(file_id, func_id, Edge::new(EdgeKind::Contains));
+    }
+
+    let dispatcher = AnalyzerDispatcher::new();
+    let mut config = RevetConfig::default();
+    config.modules.dead_code = true;
+    let findings = dispatcher.run_graph_analyzers(&graph, &config);
+
+    let dead: Vec<_> = findings
+        .iter()
+        .filter(|f| f.id.starts_with("DEAD"))
+        .collect();
+
+    assert!(
+        dead.is_empty(),
+        "Entry-point functions should not be flagged as dead code; got {:?}",
+        dead
     );
 }
