@@ -4,7 +4,7 @@
 //! that the resolver added the expected `Imports`, `References`, and `Calls`
 //! edges across file boundaries.
 
-use revet_core::graph::{EdgeKind, NodeData, NodeKind};
+use revet_core::graph::{EdgeKind, EdgeMetadata, NodeData, NodeKind};
 use revet_core::ParserDispatcher;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -332,4 +332,197 @@ fn test_multiple_named_imports_each_get_references_edge() {
         ref_count, 3,
         "expected 3 References edges, one per imported name"
     );
+}
+
+// ── Cross-file Calls edges (rvt-50 / rvt-56) ───────────────────────────────
+
+/// `from utils import helper; helper()` — the call site should become a
+/// `Calls` edge from `run` → `helper` across file boundaries.
+#[test]
+fn test_python_from_import_call_creates_calls_edge() {
+    let dir = TempDir::new().unwrap();
+    let utils = write(&dir, "utils.py", "def helper(): pass\n");
+    let main = write(
+        &dir,
+        "main.py",
+        "from utils import helper\n\ndef run():\n    helper()\n",
+    );
+
+    let dispatcher = ParserDispatcher::new();
+    let (graph, errors) = dispatcher.parse_files_parallel(&[utils, main], dir.path().to_path_buf());
+    assert!(errors.is_empty(), "errors: {:?}", errors);
+
+    // Locate the `run` function node (in main.py)
+    let run_id = graph
+        .nodes()
+        .find(|(_, n)| n.name() == "run" && matches!(n.kind(), NodeKind::Function))
+        .map(|(id, _)| id)
+        .expect("expected `run` function node");
+
+    // There should be a Calls edge from `run` to `helper`
+    let calls_targets: Vec<_> = graph
+        .edges_from(run_id)
+        .filter(|(_, e)| matches!(e.kind(), EdgeKind::Calls))
+        .map(|(target, _)| target)
+        .collect();
+
+    assert!(
+        !calls_targets.is_empty(),
+        "expected at least one Calls edge from `run`"
+    );
+
+    let callee = graph.node(calls_targets[0]).unwrap();
+    assert_eq!(callee.name(), "helper");
+    assert!(callee.file_path().ends_with("utils.py"));
+}
+
+/// `from utils import helper; helper()` — verify the call-site line number is
+/// captured in `EdgeMetadata::Call`.
+#[test]
+fn test_python_cross_file_call_records_line_number() {
+    let dir = TempDir::new().unwrap();
+    let utils = write(&dir, "utils.py", "def helper(): pass\n");
+    let main = write(
+        &dir,
+        "main.py",
+        // Line 1: import, Line 2: blank, Line 3: def run, Line 4: call
+        "from utils import helper\n\ndef run():\n    helper()\n",
+    );
+
+    let dispatcher = ParserDispatcher::new();
+    let (graph, errors) = dispatcher.parse_files_parallel(&[utils, main], dir.path().to_path_buf());
+    assert!(errors.is_empty(), "errors: {:?}", errors);
+
+    let run_id = graph
+        .nodes()
+        .find(|(_, n)| n.name() == "run" && matches!(n.kind(), NodeKind::Function))
+        .map(|(id, _)| id)
+        .expect("expected `run` function node");
+
+    let call_edge = graph
+        .edges_from(run_id)
+        .find(|(_, e)| matches!(e.kind(), EdgeKind::Calls));
+
+    assert!(call_edge.is_some(), "expected a Calls edge from `run`");
+    let (_, edge) = call_edge.unwrap();
+
+    match edge.metadata() {
+        Some(EdgeMetadata::Call { line, .. }) => {
+            assert_eq!(*line, 4, "call should be on line 4");
+        }
+        other => panic!("Calls edge should have Call metadata, got {:?}", other),
+    }
+}
+
+/// `import utils; utils.helper()` (module-qualified call) should also produce
+/// a cross-file Calls edge.
+#[test]
+fn test_python_module_qualified_call_creates_calls_edge() {
+    let dir = TempDir::new().unwrap();
+    let utils = write(&dir, "utils.py", "def helper(): pass\n");
+    let main = write(
+        &dir,
+        "main.py",
+        "import utils\n\ndef run():\n    utils.helper()\n",
+    );
+
+    let dispatcher = ParserDispatcher::new();
+    let (graph, errors) = dispatcher.parse_files_parallel(&[utils, main], dir.path().to_path_buf());
+    assert!(errors.is_empty(), "errors: {:?}", errors);
+
+    let run_id = graph
+        .nodes()
+        .find(|(_, n)| n.name() == "run" && matches!(n.kind(), NodeKind::Function))
+        .map(|(id, _)| id)
+        .expect("expected `run` function node");
+
+    let calls_count = graph
+        .edges_from(run_id)
+        .filter(|(_, e)| matches!(e.kind(), EdgeKind::Calls))
+        .count();
+
+    assert!(
+        calls_count > 0,
+        "expected a Calls edge from `run` for qualified call"
+    );
+}
+
+/// `transitive_callers` should traverse cross-file Calls edges:
+/// `alpha` calls `beta` (same file), `beta` calls `helper` (cross-file).
+/// Querying transitive callers of `helper` should return both `beta` and `alpha`.
+#[test]
+fn test_python_transitive_callers_cross_file() {
+    let dir = TempDir::new().unwrap();
+    let utils = write(&dir, "utils.py", "def helper(): pass\n");
+    let main = write(
+        &dir,
+        "main.py",
+        "from utils import helper\n\ndef beta():\n    helper()\n\ndef alpha():\n    beta()\n",
+    );
+
+    let dispatcher = ParserDispatcher::new();
+    let (graph, errors) = dispatcher.parse_files_parallel(&[utils, main], dir.path().to_path_buf());
+    assert!(errors.is_empty(), "errors: {:?}", errors);
+
+    let helper_id = graph
+        .nodes()
+        .find(|(_, n)| n.name() == "helper")
+        .map(|(id, _)| id)
+        .expect("expected `helper` node");
+
+    let callers = graph.query().transitive_callers(helper_id, Some(5));
+
+    let caller_names: Vec<&str> = callers
+        .iter()
+        .filter_map(|&id| graph.node(id))
+        .map(|n| n.name())
+        .collect();
+
+    assert!(
+        caller_names.contains(&"beta"),
+        "expected `beta` as direct caller; got {:?}",
+        caller_names
+    );
+    assert!(
+        caller_names.contains(&"alpha"),
+        "expected `alpha` as transitive caller; got {:?}",
+        caller_names
+    );
+}
+
+/// Rust: `use utils::helper; helper()` — cross-file Calls edge via use declaration.
+#[test]
+fn test_rust_use_import_call_creates_calls_edge() {
+    let dir = TempDir::new().unwrap();
+    let utils = write(&dir, "utils.rs", "pub fn helper() {}\n");
+    let main = write(
+        &dir,
+        "main.rs",
+        "use utils::helper;\n\nfn run() {\n    helper();\n}\n",
+    );
+
+    let dispatcher = ParserDispatcher::new();
+    let (graph, errors) = dispatcher.parse_files_parallel(&[utils, main], dir.path().to_path_buf());
+    assert!(errors.is_empty(), "errors: {:?}", errors);
+
+    let run_id = graph
+        .nodes()
+        .find(|(_, n)| n.name() == "run" && matches!(n.kind(), NodeKind::Function))
+        .map(|(id, _)| id)
+        .expect("expected `run` function node");
+
+    let calls_targets: Vec<_> = graph
+        .edges_from(run_id)
+        .filter(|(_, e)| matches!(e.kind(), EdgeKind::Calls))
+        .map(|(target, _)| target)
+        .collect();
+
+    assert!(
+        !calls_targets.is_empty(),
+        "expected a Calls edge from `run` to `helper` across Rust files"
+    );
+
+    let callee = graph.node(calls_targets[0]).unwrap();
+    assert_eq!(callee.name(), "helper");
+    assert!(callee.file_path().ends_with("utils.rs"));
 }

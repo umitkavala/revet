@@ -458,3 +458,73 @@ pub(super) fn collect_import_state(graph: &CodeGraph, file_path: &std::path::Pat
 
     state
 }
+
+/// Build a `callee_name → module_specifier` map from a `ParseState`'s imports.
+///
+/// - `from module import func` → `"func" → "module"`
+/// - `import module` or wildcard → `"module" → "module"` (last dotted segment)
+pub(super) fn build_imports_map(state: &ParseState) -> HashMap<String, String> {
+    let mut map: HashMap<String, String> = HashMap::new();
+    for imp in &state.unresolved_imports {
+        for name in &imp.imported_names {
+            map.insert(name.clone(), imp.module_specifier.clone());
+        }
+        // Bare `import module` or wildcard — map the simple module name too
+        if imp.imported_names.is_empty() || imp.is_wildcard {
+            let simple = imp
+                .module_specifier
+                .split('.')
+                .next_back()
+                .unwrap_or(&imp.module_specifier);
+            map.insert(simple.to_string(), imp.module_specifier.clone());
+        }
+    }
+    map
+}
+
+/// Build a `name → NodeId` map for all non-File / non-Import nodes in `file_path`.
+pub(super) fn build_function_nodes_map(
+    graph: &CodeGraph,
+    file_path: &std::path::Path,
+) -> HashMap<String, NodeId> {
+    graph
+        .nodes()
+        .filter(|(_, n)| {
+            n.file_path() == file_path && !matches!(n.kind(), NodeKind::File | NodeKind::Import)
+        })
+        .map(|(id, n)| (n.name().to_string(), id))
+        .collect()
+}
+
+/// Given a full call-target string and the imports map, return
+/// `Some((module_specifier, callee_name))` when this is a cross-file call
+/// to an imported symbol, or `None` for local / unrecognised calls.
+pub(super) fn resolve_import_call(
+    callee_full: &str,
+    imports_map: &HashMap<String, String>,
+    function_nodes: &HashMap<String, NodeId>,
+) -> Option<(String, String)> {
+    // Already resolved locally — skip
+    if function_nodes.contains_key(callee_full) {
+        return None;
+    }
+
+    // Simple name: `func()` where `func` was imported
+    if let Some(module) = imports_map.get(callee_full) {
+        return Some((module.clone(), callee_full.to_string()));
+    }
+
+    // Dotted call: `module.func()` or `obj.method()`
+    if let Some(dot_pos) = callee_full.find('.') {
+        let prefix = &callee_full[..dot_pos];
+        let method = &callee_full[dot_pos + 1..];
+        // Skip deeply-nested paths like `a.b.c()`
+        if !method.contains('.') {
+            if let Some(module) = imports_map.get(prefix) {
+                return Some((module.clone(), method.to_string()));
+            }
+        }
+    }
+
+    None
+}
